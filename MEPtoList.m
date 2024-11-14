@@ -1,3 +1,4 @@
+%% Reorder the MEP from a cell array into a list (i.e. table)
 load(fullfile('W:\Experimental Data\2019-04 M1M1PAS (processed)\Summary files',...
     'SIHI_data_16subj_with_Rearranged.mat'),'MEP','INT')
 % "MEP" is (nSubjects, nConditions, nTimes, nChannels)
