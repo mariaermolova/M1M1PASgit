@@ -4,7 +4,7 @@ eeglab
 addpath('W:\Projects\2019-04 M1M1PAS Project\analysis\source_Paolo\Source ristretta\Matti functions')  
 addpath('W:\Projects\2019-04 M1M1PAS Project\analysis\source_Paolo\Source ristretta\NeoMNE')
 
-%% MNE solution: TEPs
+%% Beamformer
 clear
 subIds = [1:9,11:17];
 sesIds = [1:4];
@@ -53,8 +53,10 @@ for subIdx = subIds
             EEG = pop_loadset( 'filename', ['sub-' subId '_ses-' sesId '_task-' taskId...
                 '_run-' runId '_eeg.set'], 'filepath', ...
                 ['W:\Experimental Data\2019-04 M1M1PAS (processed)\BIDS_EXPORT\derivatives\eeglab\derivatives\preprocessed']);
-            
+
             Xst = EEG.data;
+            chN=size(Xst,1); 
+            Xst=reshape(Xst,chN,[]);
             
             % %Run with random data
             % randinds = [];
@@ -86,15 +88,68 @@ for subIdx = subIds
             lf1 = LnrN(:,indicesL);
             filt = pinv(lf1' * invCy * lf1) * lf1' * invCy;  
             source_L=filt * Xst;
-            leftSM = mean(source_L,1);
+            % leftSM = mean(source_L,1);
+            pcaL = pca(source_L);
+            leftSM = pcaL(:,1)';
             
             %M1Right
             lf1 = LnrN(:,indicesR);
             filt = pinv(lf1' * invCy * lf1) * lf1' * invCy;  
             source_R=filt * Xst;
-            rightSM = mean(source_R,1);
+            % rightSM = mean(source_R,1);
+            pcaR = pca(source_R);
+            rightSM = pcaR(:,1)';
 
-            save(['Beamformer/sub-' subId '_task-' taskId '_run-' runId '_Beam'],'leftSM','rightSM')
+
+            save(['W:\Projects\2019-04 M1M1PAS Project\analysis\source_Paolo\BeamformeroldLFPC\sub-' subId '_task-' taskId '_run-' runId '_Beam'],'leftSM','rightSM')
+        end
+    end
+end
+%%
+%%
+addpath('W:\Experimental Data\2019-04 M1M1PAS (processed)\toolboxes\eeglab2024.2')
+eeglab
+addpath('W:\Projects\2019-04 M1M1PAS Project\analysis\source_Paolo\Source ristretta\Matti functions')  
+addpath('W:\Projects\2019-04 M1M1PAS Project\analysis\source_Paolo\Source ristretta\NeoMNE')
+
+%% Beamformer
+clear
+subIds = [1:9,11:17];
+sesIds = [1:4];
+runIds = [1:5];
+
+%loop over subjects
+for subIdx = subIds(10)
+    subId = num2str(subIdx);
+
+    %loop over sessions
+    for sesId = sesIds(4)
+        sesId = num2str(sesId);
+
+
+        % map sessions to conditions
+        if strcmp(sesId,'1')
+            taskId = 'negneg';
+        elseif strcmp(sesId,'2')
+            taskId = 'negpos';
+        elseif strcmp(sesId,'3')
+            taskId = 'posneg';
+        elseif strcmp(sesId,'4')
+            taskId = 'random';
+        end
+    
+
+        %loop over recordings
+        for runId = runIds(4)
+            runId = num2str(runId);
+
+            
+            load(['W:\Projects\2019-04 M1M1PAS Project\analysis\source_Paolo\BeamformeroldLFPC\sub-' subId '_task-' taskId '_run-' runId '_Beam'])
+
+            rightSM = rightSM';
+            leftSM = leftSM';
+
+            save(['W:\Projects\2019-04 M1M1PAS Project\analysis\source_Paolo\BeamformeroldLFPC\sub-' subId '_task-' taskId '_run-' runId '_Beam'],'leftSM','rightSM')
         end
     end
 end
