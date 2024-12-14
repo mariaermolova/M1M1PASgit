@@ -88,17 +88,17 @@ for subIdx = subIds
             lf1 = LnrN(:,indicesL);
             filt = pinv(lf1' * invCy * lf1) * lf1' * invCy;  
             source_L=filt * Xst;
-            % leftSM = mean(source_L,1);
-            pcaL = pca(source_L);
-            leftSM = pcaL(:,1)';
+            leftSM = mean(source_L,1);
+            % pcaL = pca(source_L);
+            % leftSM = pcaL(:,1)';
             
             %M1Right
             lf1 = LnrN(:,indicesR);
             filt = pinv(lf1' * invCy * lf1) * lf1' * invCy;  
             source_R=filt * Xst;
-            % rightSM = mean(source_R,1);
-            pcaR = pca(source_R);
-            rightSM = pcaR(:,1)';
+            rightSM = mean(source_R,1);
+            % pcaR = pca(source_R);
+            % rightSM = pcaR(:,1)';
 
 
             save(['W:\Projects\2019-04 M1M1PAS Project\analysis\source_Paolo\BeamformeroldLFPC\sub-' subId '_task-' taskId '_run-' runId '_Beam'],'leftSM','rightSM')

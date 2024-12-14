@@ -88,12 +88,12 @@ for subIdx = subIds
             [indicesR] = indices(167:end);
 
             %select and average over dipoles of interest
-            % leftSM = mean(Sestim(indicesL,:),1);
-            % rightSM = mean(Sestim(indicesR,:),1);
-            pcaL = pca(Sestim(indicesL,:));
-            leftSM = pcaL(:,1)';
-            pcaR = pca(Sestim(indicesR,:));
-            rightSM = pcaR(:,1)';
+            leftSM = mean(Sestim(indicesL,:),1);
+            rightSM = mean(Sestim(indicesR,:),1);
+            % pcaL = pca(Sestim(indicesL,:));
+            % leftSM = pcaL(:,1)';
+            % pcaR = pca(Sestim(indicesR,:));
+            % rightSM = pcaR(:,1)';
 
             save(['W:\Projects\2019-04 M1M1PAS Project\analysis\source_Paolo\MNEoldLFPC\sub-' subId '_task-' taskId '_run-' runId '_MNE'],'leftSM','rightSM')
         end
