@@ -104,3 +104,4 @@ for subIdx = subIds
             save(['W:\Projects\2019-04 M1M1PAS Project\analysis\source_Paolo\BeamformeroldLFPC\sub-' subId '_task-' taskId '_run-' runId '_Beam'],'leftSM','rightSM')
         end
     end
+end
