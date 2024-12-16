@@ -20,6 +20,7 @@ for subIdx = subIds
 
     clear Mdw
 
+    %load the Mdw of the subject
     load(['W:\Projects\2019-04 M1M1PAS Project\analysis\source_Paolo\Mdw\M1M1PAS' alldata{subIdx,'subject'}{:} '.mat']) ;
 
     %loop over sessions
