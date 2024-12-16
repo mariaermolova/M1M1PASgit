@@ -1,0 +1,84 @@
+---
+title: "Phase lag analysis"
+output: powerpoint_presentation
+date: "2024-12-12"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r libraries, echo=FALSE, warning = FALSE, message=FALSE}
+library(tidyverse)
+library(lattice)
+library(latticeExtra)
+library(gridExtra) # adjust plots in a grid
+library(lme4) # linear mixed models
+library(kableExtra)
+library(nlme)
+library(performance)
+library(emmeans) # post hoc multiple comparisons of linear mixed models
+library(see)
+library(patchwork)
+```
+
+```{r, echo=FALSE}
+setwd("W:/Projects/2019-04 M1M1PAS Project/analysis/M1M1PASgit")
+
+FCdata <- read.csv('W:/Projects/2019-04 M1M1PAS Project/analysis/source_Paolo/fc_source/sourceBeamformeroldLF_phlags.csv', header=TRUE, sep=',', dec='.')
+FCdata$Subject <- factor(FCdata$subject)
+FCdata$Intervention <- factor(FCdata$task)
+FCdata$Time <- factor(FCdata$run,levels=c("1","2","3","4","5"))
+FCdata$phase_lag <- as.numeric(FCdata$phase_lag)
+
+```
+
+```{r, echo=FALSE}
+
+FCdata$ResponseSin <- sin(FCdata$phase_lag)
+FCdata$ResponseCos <- cos(FCdata$phase_lag)
+
+
+```
+## Check distribution of the dependant variable
+
+```{r, echo=FALSE, fig.dim = c(12,8)}
+
+xy.time <- xyplot(Response ~ Time, data = FCdata, type = c("a", "p"), pch = 20,
+                  group = Subject, xlab = "Time", ylab = "FC", lwd = 2)
+
+xy.interv <- xyplot(Response ~ Intervention, data = FCdata, type = c("a", "p"), pch = 20,
+                 group = Subject, xlab = "Intervention", ylab = "FC", lwd = 2)
+                    
+qq.data <- qqmath(~ Response, data = FCdata,
+                  ylab = "FC",
+                  prepanel = prepanel.qqmathline,
+                  distribution = qnorm,
+                  panel = function(x, ...) {
+                    #panel.qqmathci(x, ...)
+                    panel.qqmathline(x, ...)
+                    panel.qqmath(x, ...)
+                  })
+
+grid.arrange(grobs = list(xy.time,xy.interv,qq.data), ncol = 2, nrow = 2)
+```
+## Check distribution of the dependant variable
+
+```{r, echo=FALSE}
+hist(FCdata$ResponseCos, xlab = "FC")
+```
+## LME. Model selection
+
+```{r}
+install.packages("bpnreg")
+library(bpnreg)
+
+```
+
+```{r}
+model <- bpnr(pred.I = phase_lag ~ 1 + Subject, its = 1000, burn = 500, data = FCdata)
+
+# Summarize results
+summary(model)
+
+```
