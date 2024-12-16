@@ -1,0 +1,285 @@
+---
+title: "FCAnalysisAEC"
+output: powerpoint_presentation
+date: "2024-12-14"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+```{r libraries, echo=FALSE, warning = FALSE, message=FALSE}
+library(tidyverse)
+library(lattice)
+library(latticeExtra)
+library(gridExtra) # adjust plots in a grid
+library(lme4) # linear mixed models
+library(kableExtra)
+library(nlme)
+library(performance)
+library(emmeans) # post hoc multiple comparisons of linear mixed models
+library(see)
+library(patchwork)
+```
+
+```{r, echo=FALSE}
+setwd("W:/Projects/2019-04 M1M1PAS Project/analysis/M1M1PASgit")
+
+FCdata <- read.csv('W:/Projects/2019-04 M1M1PAS Project/analysis/source_Paolo/fc_source/sourceConnectivityBeamformeroldLF.csv', header=TRUE, sep=',', dec='.')
+FCdata$Subject <- factor(FCdata$subject)
+FCdata$Intervention <- factor(FCdata$task)
+FCdata$Time <- factor(FCdata$run,levels=c("1","2","3","4","5"))
+FCdata$wPLI <- as.numeric(FCdata$wpli)
+FCdata$ciPLV <- as.numeric(FCdata$ciplv)
+FCdata$AEC <- as.numeric(FCdata$aec)
+```
+
+```{r, echo=FALSE}
+
+FCdata$Response <- FCdata$wPLI
+
+```
+## Check distribution of the dependant variable
+
+```{r, echo=FALSE, fig.dim = c(12,8)}
+
+xy.time <- xyplot(Response ~ Time, data = FCdata, type = c("a", "p"), pch = 20,
+                  group = Subject, xlab = "Time", ylab = "FC", lwd = 2)
+
+xy.interv <- xyplot(Response ~ Intervention, data = FCdata, type = c("a", "p"), pch = 20,
+                 group = Subject, xlab = "Intervention", ylab = "FC", lwd = 2)
+                    
+qq.data <- qqmath(~ Response, data = FCdata,
+                  ylab = "FC",
+                  prepanel = prepanel.qqmathline,
+                  distribution = qnorm,
+                  panel = function(x, ...) {
+                    #panel.qqmathci(x, ...)
+                    panel.qqmathline(x, ...)
+                    panel.qqmath(x, ...)
+                  })
+
+grid.arrange(grobs = list(xy.time,xy.interv,qq.data), ncol = 2, nrow = 2)
+```
+## Check distribution of the dependant variable
+
+```{r, echo=FALSE}
+hist(FCdata$Response, xlab = "FC")
+```
+
+The AEC is not normally distributed.
+
+## Check distribution of the normalised variable
+
+We transform it by taking it to the power of 0.30.
+
+```{r, echo=FALSE}
+FCdata$ResponseNorm <- atanh(FCdata$Response)^0.24
+```
+## Check distribution of the normalised variable
+
+```{r, echo=FALSE, fig.dim = c(12,8)}
+xy.time <- xyplot(ResponseNorm ~ Time, data = FCdata, type = c("a", "p"), pch = 20,
+                  group = Subject, xlab = "Time", ylab = "Normalised FC", lwd = 2)
+
+xy.interv <- xyplot(ResponseNorm ~ Intervention, data = FCdata, type = c("a", "p"), pch = 
+                      20, group = Subject, xlab = "Intervention", ylab = "Normalised FC", 
+                    lwd = 2)
+                    
+qq.data <- qqmath(~ ResponseNorm, data = FCdata,
+                  ylab = "FC",
+                  prepanel = prepanel.qqmathline,
+                  distribution = qnorm,
+                  panel = function(x, ...) {
+                    #panel.qqmathci(x, ...)
+                    panel.qqmathline(x, ...)
+                    panel.qqmath(x, ...)
+                  })
+
+grid.arrange(grobs = list(xy.time,xy.interv,qq.data), ncol = 2, nrow = 2)
+
+```
+## Check distribution of the normalised variable
+
+```{r, echo=FALSE}
+#FCdata$ResponseNorm <- (FCdata$Response)^0.27
+#FCdata$ResponseNorm <- atanh(FCdata$Response)^0.24
+#FCdata$ResponseNorm <- atanh(FCdata$Response)^0.24
+hist(FCdata$ResponseNorm, xlab = "normalised FC")
+
+```
+## LME. Model selection
+
+```{r}
+model1 <- lme4::lmer(ResponseNorm ~ Intervention*Time + (1|Subject),
+                     data = FCdata, REML = F,
+                     control = lmerControl(optCtrl = list(maxfun = 1e6)))
+
+model2 <- lme4::lmer(ResponseNorm ~ Intervention*Time + (1|Subject/Intervention),
+                     data = FCdata, REML = F,
+                     control = lmerControl(optCtrl = list(maxfun = 1e6)))
+
+anova(model1,model2)
+```
+## LME. Model selection
+
+A model with a session as a random effect (1 \| Subject/Intervention) has lower AIC and BIC values, so we will take it for further analysis.
+
+## LME. Significance test
+
+```{r}
+model <- lmerTest::lmer(ResponseNorm ~ Intervention*Time + (1|Subject/Intervention),
+                     data = FCdata, REML = T,
+                     control = lmerControl(optCtrl = list(maxfun = 1e6)))
+car::Anova(model)
+```
+## LME. Significance test
+
+2-way interaction of Intervention:Time is significant. The main effect of Time is also significant.
+
+## LME. Model quality checks
+
+```{r, echo=FALSE, fig.dim = c(15,30)}
+check_model(model)
+```
+## LME. Model quality checks
+
+Model residuals are approximately okay but collinearity is very high.
+
+## LME. Model quality checks
+
+```{r, echo=FALSE}
+library(ggplot2)
+
+# Extract residuals and fitted values
+residuals <- resid(model)
+fitted <- fitted(model)
+
+# Plot residuals vs. fitted values
+ggplot(data.frame(Fitted = fitted, Residuals = residuals), aes(x = Fitted, y = Residuals)) +
+  geom_point() +
+  geom_hline(yintercept = 0, color = "red", linetype = "dashed") +
+  labs(title = "Residuals vs. Fitted Values", x = "Fitted Values", y = "Residuals")
+
+```
+## LME. Model quality checks
+
+```{r, echo=FALSE}
+ggplot(data.frame(Fitted = fitted, Residuals = residuals), aes(x = Fitted, y = sqrt(abs(Residuals)))) +
+  geom_point() +
+  geom_smooth(method = "loess", color = "blue") +
+  labs(title = "Scale-Location Plot", x = "Fitted Values", y = "Square Root of |Residuals|")
+```
+## LME. Model quality checks
+
+```{r}
+model_reduced <- lmerTest::lmer(ResponseNorm ~ Intervention + Time + (1|Subject/Intervention),
+                     data = FCdata, REML = T,
+                     control = lmerControl(optCtrl = list(maxfun = 1e6)))
+check_collinearity(model_reduced)
+```
+
+If we fit a model without interactions, with just main effects, there is no collinearity. So we will ignore this issue.
+
+## Post-hoc plots of significant effects
+
+We will plot not raw but normalised data, the way it was used in the model. Since it's approximately normal, the y-axis is mean and SE of the data.
+
+```{r, echo=FALSE, warning = FALSE, message=FALSE, fig.dim = c(12,8)}
+sub_sum_noInt_FCdata <- FCdata %>%   
+  group_by(Subject, Time) %>%  
+  summarize(ResponseNorm_subject_mean = mean(ResponseNorm)) %>%
+  ungroup()
+
+sum_noInt_FCdata <- sub_sum_noInt_FCdata %>%   
+  group_by(Time) %>%  
+  summarize(ResponseNorm_mean = mean(ResponseNorm_subject_mean),
+            ResponseNorm_se = sd(ResponseNorm_subject_mean)/sqrt(length(ResponseNorm_subject_mean))) %>%
+  ungroup()
+
+sum_noInt_FCdata %>%
+  ggplot(aes(x = as.numeric(Time),  
+             y = ResponseNorm_mean)) +    
+  geom_point(size = 3) + 
+  geom_line(size = 1) +
+  geom_errorbar(aes(ymax=ResponseNorm_mean+ResponseNorm_se, ymin=ResponseNorm_mean-ResponseNorm_se), width=.1, size = 1) 
+  
+```
+
+```{r, echo=FALSE, warning = FALSE, message=FALSE, fig.dim = c(12,8)}
+
+sum_FCdata <- FCdata %>%   
+  group_by(Intervention, Time) %>%  
+  summarize(ResponseNorm_mean = mean(ResponseNorm),
+            ResponseNorm_se = sd(ResponseNorm)/sqrt(length(ResponseNorm))) %>%
+  ungroup()
+
+sum_FCdata %>%
+  ggplot(aes(x = Time,  
+             y = ResponseNorm_mean,
+             group = Intervention,  
+             color = Intervention)) +    
+  geom_point(size = 3) + 
+  geom_line(size=1) +
+  geom_errorbar(aes(ymax=ResponseNorm_mean+ResponseNorm_se, ymin=ResponseNorm_mean-ResponseNorm_se), width=.1, size = 1) +
+  theme(legend.position="top")
+```
+
+## Post-hoc pairwise comparisons
+
+```{r, echo=FALSE}
+
+emm.model <- emmeans(model, ~ Time, data = FCdata)
+
+emm.model.contrast = contrast(emm.model, "trt.vs.ctrl1", 
+                                   combine = TRUE, adjust = "fdr")
+
+contrast.summary <- summary(emm.model.contrast,by = NULL)
+contrast.summary
+
+```
+## Model prediction
+```{r, echo=FALSE}
+
+emmip_output <- emmip(emm.model, ~ Time ,type = "response", data = FCdata, CIs = TRUE, plotit=FALSE)
+
+ggplot(data = emmip_output, aes(x=Time, y=yvar)) +
+  geom_point(size = 2) + 
+  geom_line(group = 1, size = 0.8) +
+  geom_errorbar(aes(ymax=UCL, ymin=LCL), width=.06, size = 0.8) +
+  ylab("Predicted response")
+
+```
+## Post-hoc pairwise comparisons
+
+```{r, echo=FALSE}
+#emm_options(lmerTest.limit = 23040)
+#emm_options(pbkrtest.limit = 23040)
+emm_options(lmer.df = 'asymptotic') # also possible: 'satterthwaite', 'kenward-roger', 'asymptotic'
+
+emm.model <- emmeans(model, ~ Intervention * Time, data = FCdata)
+
+emm.model.contrast = contrast(emm.model, "pairwise", simple = "each",
+                                   combine = TRUE, adjust = "fdr")
+
+summary(emm.model.contrast,by = NULL)
+```
+## Model prediction
+
+```{r, echo=FALSE}
+emm.model <- emmeans(model, ~ Intervention * Time,  data = FCdata)
+
+emmip_output <- emmip(emm.model, ~ Intervention*Time ,type = "response", data = FCdata, CIs = TRUE, plotit=FALSE)
+
+ggplot(data = emmip_output, aes(x=Time, y=yvar,group = Intervention,  
+             color = Intervention)) +
+  geom_point(size = 2) + 
+  geom_line(size = 1) +
+  geom_errorbar(aes(ymax=UCL, ymin=LCL), width=.06, size = 0.8) +
+  #facet_grid(~Intervention) +
+  #scale_color_manual(values = c("grey47", "black", "black", "black", "black")) +
+  ylab("Predicted response")
+
+```
+
+```{r}
