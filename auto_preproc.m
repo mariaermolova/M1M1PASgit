@@ -1,3 +1,4 @@
+%%Automatic pre-processing of resting state EEG data
 % check folder
 addpath 'W:\Experimental Data\2019-04 M1M1PAS (processed)\toolboxes\eeglab2024.2'
 eeglab;
