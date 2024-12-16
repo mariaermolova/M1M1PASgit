@@ -1,3 +1,4 @@
+%% Get metadata for each recording for the STUDY struct
 % Path to data
 dataFolder = 'W:\\Experimental Data\\2019-04 M1M1PAS (processed)\\EEG_RS\\';
 
@@ -30,8 +31,8 @@ for i = 1:length(fileList)
     if ~isempty(tokens)
         % Extract the relevant parts of the file name
         originalSubjectNumber = tokens{1}{1}; % Original subject number from the file name
-        condition = tokens{1}{2};             % Condition
-        run = str2double(tokens{1}{3});       % Run
+        condition = tokens{1}{2};             
+        run = str2double(tokens{1}{3});       
         
         % Check if this subject already has a new assigned number
         if isKey(subjectMap, originalSubjectNumber)
@@ -40,7 +41,7 @@ for i = 1:length(fileList)
             % Assign a new subject number
             newSubjectNumber = subjectCounter;
             subjectMap(originalSubjectNumber) = newSubjectNumber;
-            subjectCounter = subjectCounter + 1; % Increment the subject counter for the next new subject
+            subjectCounter = subjectCounter + 1; 
         end
         
         % Map condition to session
@@ -59,7 +60,6 @@ for i = 1:length(fileList)
         STUDY.datasetinfo(index).condition = condition;
         STUDY.datasetinfo(index).task = condition;
         
-        % Increment the index counter
         index = index + 1;
     else
         warning('File name format not recognized: %s', fileName);
