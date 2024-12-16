@@ -1,5 +1,5 @@
 %% Create an EEGLAB STUDY structure (to use automatic batch processing)
-%existing STUDY structure was created with create_study.m
+%existing STUDY structure was created with get_names_bids.m
 
 % % To do this manually
 %[ALLEEG EEG CURRENTSET ALLCOM] = eeglab;
