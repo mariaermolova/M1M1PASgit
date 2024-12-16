@@ -1,8 +1,10 @@
 ---
-title: "SIHIAnalysis"
+title: "SIHIAnalysisFDI"
 author: "Maria Ermolova"
-date: '2024-08-07'
-output: powerpoint_presentation
+date: "2024-12-15"
+output:
+  powerpoint_presentation: default
+  ioslides_presentation: default
 html_document: default
 pdf_document: default
 ---
@@ -21,10 +23,12 @@ library(kableExtra)
 library(nlme)
 library(performance)
 library(emmeans) # post hoc multiple comparisons of linear mixed models
+library(see)
+library(patchwork)
 ```
 
 ```{r, echo=FALSE}
-setwd("W:/Projects/2019-04 M1M1PAS Project/analysis")
+setwd("W:/Projects/2019-04 M1M1PAS Project/analysis/M1M1PASgit")
 
 MEPdata <- read.csv('MEPdata.csv', header=TRUE, sep=',', dec='.')
 MEPdata$Subject <- factor(MEPdata$Subject)
@@ -35,33 +39,8 @@ MEPdata$Intensity <- as.numeric(MEPdata$Intensity)
 MEPdata$Response <- as.numeric(MEPdata$Response)
 
 FDIdata <- subset(MEPdata, Channel == "FDIl")
-FDIdata$ResponseNorm <- sqrt(sqrt(FDIdata$Response))
-```
-## Single trial data with linear and polynomial fits
-Example for Subject 1. Single trial data with linear fit.
-
-```{r, echo=FALSE, warning = FALSE, message=FALSE, fig.dim = c(12,8) }
-ggplot(subset(FDIdata,Subject=="sub-001"), aes(x = Intensity, y = Response)) +
-  geom_point() +
-  geom_smooth(method = "lm", se = TRUE) +
-  facet_wrap(~ Intervention + Time) +
-  ylab("SIHI")
 ```
 
-## Single trial data with linear and polynomial fits
-With polynomial fit.
-
-```{r, echo=FALSE, warning = FALSE, message=FALSE, fig.dim = c(12,8) }
-
-ggplot(subset(FDIdata,Subject=="sub-001"), aes(x = Intensity, y = Response)) +
-  geom_point() +
-  geom_smooth(method = "loess", se = TRUE) +
-  facet_wrap(~ Intervention + Time) +
-  ylab("SIHI")
-```
-
----
-Linear fit is good enough for the data, so we will not be fitting sigmoidal function and will keep it all linear.
 
 ## Check distribution of the dependant variable
 
@@ -95,29 +74,29 @@ grid.arrange(grobs = list(xy.time,xy.interv,xy.intens,qq.data), ncol = 2, nrow =
 hist(FDIdata$Response, xlab = "SIHI")
 ```
 
-Single-trial SIHI is not normally distributed. 
+Single-trial SIHI is not normally distributed.
 
 ## Check distribution of the normalised variable
 
 We transform it by taking a root to the 4th power of the single-trial SIHI.
 
 ```{r, echo=FALSE, fig.dim = c(12,8)}
+FDIdata$ResponseNorm <- (FDIdata$Response)^0.25
 
 xy.time <- xyplot(ResponseNorm ~ Time, data = FDIdata, type = c("a", "p"), pch = 20,
-                  group = Subject, xlab = "Time", ylab = "SIHI^0.25", lwd = 2)
+                  group = Subject, xlab = "Time", ylab = "Normalised SIHI", lwd = 2)
 
 xy.interv <- xyplot(ResponseNorm ~ Intervention, data = FDIdata, type = c("a", "p"), pch = 20,
-                 group = Subject, xlab = "Intervention", ylab = "SIHI^0.25", lwd = 2)
+                 group = Subject, xlab = "Intervention", ylab = "Normalised SIHI", lwd = 2)
 
 xy.intens <- xyplot(ResponseNorm ~ Intensity, data = FDIdata, type = c("a", "p"), pch = 20,
-                    group = Subject, xlab = "Intensity", ylab = "SIHI^0.25", lwd = 2)
+                    group = Subject, xlab = "Intensity", ylab = "Normalised SIHI", lwd = 2)
                     
 qq.data <- qqmath(~ ResponseNorm, data = FDIdata,
-                  ylab = "SIHI^0.25",
+                  ylab = "Normalised SIHI",
                   prepanel = prepanel.qqmathline,
                   distribution = qnorm,
                   panel = function(x, ...) {
-                    #panel.qqmathci(x, ...)
                     panel.qqmathline(x, ...)
                     panel.qqmath(x, ...)
                   })
@@ -138,397 +117,10 @@ hist(FDIdata$ResponseNorm, xlab = "SIHI^0.25")
 
 Now it is approximately normal. For LME, we will use these transformed SIHI values. However, for plotting, we will use raw values with medians for expectation values and quartiles for error terms.
 
-## 3-way-interaction, group data 
-
-Y-axis is median across subjects of median SIHI across trials + quartiles across subjects. N = 16.
-
-```{r, echo=FALSE, warning = FALSE, message=FALSE}
-sum_FDIdata <- FDIdata %>%   
-  group_by(Intervention, Time, Intensity, Subject) %>%  
-  summarize(SIHI_median = median(Response),
-  measure_iqr_low = quantile(Response,0.25),
-  measure_iqr_high = quantile(Response, 0.75)) %>%
-  ungroup()
-  
-sub_sum_FDIdata <- sum_FDIdata %>%   
-  group_by(Intervention, Time, Intensity) %>%  
-  summarize(SIHI_subject_median = median(SIHI_median),
-  measure_iqr_low = quantile(SIHI_median,0.25),
-  measure_iqr_high = quantile(SIHI_median, 0.75)) %>%
-  ungroup() 
-  
-```
-
-```{r, echo=FALSE, fig.dim = c(12,8)}
-sub_sum_FDIdata %>%
-  ggplot(aes(x = Intensity,  
-             y = SIHI_subject_median,
-             group = Intervention,  
-             color = Intervention)) +    
-  geom_point(size = 3) + 
-  geom_line(size=1) +
-  geom_errorbar(aes(ymax=measure_iqr_high, ymin=measure_iqr_low), width=.1, size = 1) +
-  theme(legend.position="top") +
-  facet_wrap(~ Time)
-```
-
-## 3-way-interaction, group data
-
-At baseline, there is stronger difference between conditions for very low and very high intensities.
-
-At 0 mins, there is no difference between conditions (which is what we would expect from the baseline).
-
-## 3-way-interaction, group data
-
-```{r, echo=FALSE, fig.dim = c(12,8)}
-sub_sum_FDIdata %>%
-  ggplot(aes(x = Intensity,  
-             y = SIHI_subject_median,
-             group = Time,  
-             color = Time)) +    
-  geom_point(size = 3) + 
-  geom_line(size=1) +
-  scale_color_manual(values = c("Pre" = "black", "0" = "blue", "30" = "magenta", "60" = "red")) +
-  geom_errorbar(aes(ymax=measure_iqr_high, ymin=measure_iqr_low), width=.1, size = 1) +
-  theme(legend.position="top") +
-  facet_wrap(~ Intervention)
-```
-
-## 3-way-interaction, group data
-
-In Random, baseline (black) has higher ratio value (i.e. weaker SIHI) then post-intervention, but only up to 130% RMT. Same in Negneg.
-
-0 min has stronger SIHI compared to baseline in all conditions. 
-
-In all conditions, except for Posneg, the difference reduces with high intensities.
-
-## 3-way-interaction, group data
-
-```{r, echo=FALSE, fig.dim = c(12,8)}
-sub_sum_FDIdata %>%
-  ggplot(aes(x = Time,  
-             y = SIHI_subject_median,
-             group = Intensity,  
-             color = Intensity)) +    
-  geom_point(size = 3) + 
-  geom_line(size=1) +
-  geom_errorbar(aes(ymax=measure_iqr_high, ymin=measure_iqr_low), width=.1, size = 1) +
-  theme(legend.position="top") +
-  facet_wrap(~ Intervention)
-```
-
-## 3-way-interaction, group data
-
-Negneg: Decrease in ratio values (increase in SIHI strength) from Pre to 0 min. Increase in ratio values from 0 min to 30 min, especially with lower intensities. 
-
-Negpos: From Pre to 0 min goes from inhibition to facilitation with increasing intensity. From 0 to 30 min goes from facilitation to inhibition with increasing intensity. So, the effect flips for the two strongest intensities.
-
-Posneg: Decrease in ratio (increase in SIHI) from Pre to 0 min, increase in ratio (decrease in SIHI) from 0 min to 30 min (more for higher intensities). 30 min is even higher that Pre sometimes. 
-
-Random: From Pre to 0 min goes from inhibition to facilitation with increasing intensity. Decrease in ratio (increase in SIHI) from 0 min to 30 min.
-
-## 3-way-interaction, group data
-
-```{r, echo=FALSE, fig.dim = c(12,8)}
-sub_sum_FDIdata %>%
-  ggplot(aes(x = Intervention,  
-             y = SIHI_subject_median,
-             group = Intensity,  
-             color = Intensity)) +    
-  geom_point(size = 3) + 
-  geom_line(size=1) +
-  geom_errorbar(aes(ymax=measure_iqr_high, ymin=measure_iqr_low), width=.1, size = 1) +
-  theme(legend.position="top") +
-  facet_wrap(~ Time)
-```
-
-## 3-way-interaction, group data
-
-Again, at 0 mins data is more stable than at baseline.
-
-At 30 and 60 mins, negneg and posneg have less SIHI than negpos and random, for strongest intensities.
-
-## Individual subject plots
-
-Y-axis is median SIHI across trials + quartiles
-
-```{r, echo=FALSE, fig.dim = c(12,8)}
-sum_FDIdata %>%
-  filter(Time == c("Pre")) %>%
-  ggplot(aes(x = Intensity,  
-             y = SIHI_median,
-             group = Intervention,  
-             color = Intervention)) +    
-  geom_point(size = 3) + 
-  geom_line(size=1) +
-  geom_errorbar(aes(ymax=measure_iqr_high, ymin=measure_iqr_low), width=.1, size = 1) +
-  theme(legend.position="top") +
-  ggtitle("Time Baseline") +
-  facet_wrap(~ Subject)
-```
-
-## Individual subject plots
-
-```{r, echo=FALSE, fig.dim = c(12,8)}
-sum_FDIdata %>%
-  filter(Time == c("0")) %>%
-  ggplot(aes(x = Intensity,  
-             y = SIHI_median,
-             group = Intervention,  
-             color = Intervention)) +    
-  geom_point(size = 3) + 
-  geom_line(size=1) +
-  geom_errorbar(aes(ymax=measure_iqr_high, ymin=measure_iqr_low), width=.1, size = 1) +
-  theme(legend.position="top") +
-  ggtitle("Time 0 min") +
-  facet_wrap(~ Subject)
-```
-
-## Individual subject plots
-
-```{r, echo=FALSE, fig.dim = c(12,8)}
-sum_FDIdata %>%
-  filter(Time == c("30")) %>%
-  ggplot(aes(x = Intensity,  
-             y = SIHI_median,
-             group = Intervention,  
-             color = Intervention)) +    
-  geom_point(size = 3) + 
-  geom_line(size=1) +
-  geom_errorbar(aes(ymax=measure_iqr_high, ymin=measure_iqr_low), width=.1, size = 1) +
-  theme(legend.position="top") +
-  ggtitle("Time 30 min") +
-  facet_wrap(~ Subject)
-```
-
-## Individual subject plots
-
-```{r, echo=FALSE, fig.dim = c(12,8)}
-sum_FDIdata %>%
-  filter(Time == c("60")) %>%
-  ggplot(aes(x = Intensity,  
-             y = SIHI_median,
-             group = Intervention,  
-             color = Intervention)) +    
-  geom_point(size = 3) + 
-  geom_line(size=1) +
-  geom_errorbar(aes(ymax=measure_iqr_high, ymin=measure_iqr_low), width=.1, size = 1) +
-  theme(legend.position="top") +
-  ggtitle("Time 60 min") +
-  facet_wrap(~ Subject)
-```
-
-## Individual subject plots
-
-```{r, echo=FALSE, fig.dim = c(12,8)}
-sum_FDIdata %>%
-  filter(Intervention == c("negneg")) %>%
-  ggplot(aes(x = Intensity,  
-             y = SIHI_median,
-             group = Time,  
-             color = Time)) +    
-  geom_point(size = 3) + 
-  geom_line(size=1) +
-  scale_color_manual(values = c("Pre" = "black", "0" = "blue", "30" = "magenta", "60" = "red")) +
-  geom_errorbar(aes(ymax=measure_iqr_high, ymin=measure_iqr_low), width=.1, size = 1) +
-  theme(legend.position="top") +
-  ggtitle("Intervention Negneg") +
-  facet_wrap(~ Subject)
-```
-
-## Individual subject plots
-
-```{r, echo=FALSE, fig.dim = c(12,8)}
-sum_FDIdata %>%
-  filter(Intervention == c("negpos")) %>%
-  ggplot(aes(x = Intensity,  
-             y = SIHI_median,
-             group = Time,  
-             color = Time)) +    
-  geom_point(size = 3) + 
-  geom_line(size=1) +
-  scale_color_manual(values = c("Pre" = "black", "0" = "blue", "30" = "magenta", "60" = "red")) +
-  geom_errorbar(aes(ymax=measure_iqr_high, ymin=measure_iqr_low), width=.1, size = 1) +
-  theme(legend.position="top") +
-  ggtitle("Intervention Negpos") +
-  facet_wrap(~ Subject)
-```
-
-## Individual subject plots
-
-```{r, echo=FALSE, fig.dim = c(12,8)}
-sum_FDIdata %>%
-  filter(Intervention == c("posneg")) %>%
-  ggplot(aes(x = Intensity,  
-             y = SIHI_median,
-             group = Time,  
-             color = Time)) +    
-  geom_point(size = 3) + 
-  geom_line(size=1) +
-  scale_color_manual(values = c("Pre" = "black", "0" = "blue", "30" = "magenta", "60" = "red")) +
-  geom_errorbar(aes(ymax=measure_iqr_high, ymin=measure_iqr_low), width=.1, size = 1) +
-  theme(legend.position="top") +
-  ggtitle("Intervention Posneg") +
-  facet_wrap(~ Subject)
-```
-
-## Individual subject plots
-
-```{r, echo=FALSE, fig.dim = c(12,8)}
-sum_FDIdata %>%
-  filter(Intervention == c("random")) %>%
-  ggplot(aes(x = Intensity,  
-             y = SIHI_median,
-             group = Time,  
-             color = Time)) +    
-  geom_point(size = 3) + 
-  geom_line(size=1) +
-  scale_color_manual(values = c("Pre" = "black", "0" = "blue", "30" = "magenta", "60" = "red")) +
-  geom_errorbar(aes(ymax=measure_iqr_high, ymin=measure_iqr_low), width=.1, size = 1) +
-  theme(legend.position="top") +
-  ggtitle("Intervention Random") +
-  facet_wrap(~ Subject)
-```
-
-## Individual subject plots
-
-```{r, echo=FALSE, fig.dim = c(12,8)}
-sum_FDIdata %>%
-  filter(Intervention == c("negneg")) %>%
-  ggplot(aes(x = Time,  
-             y = SIHI_median,
-             group = Intensity,  
-             color = Intensity)) +    
-  geom_point(size = 3) + 
-  geom_line(size=1) +
-  geom_errorbar(aes(ymax=measure_iqr_high, ymin=measure_iqr_low), width=.1, size = 1) +
-  theme(legend.position="top") +
-  ggtitle("Intervention Negneg") +
-  facet_wrap(~ Subject)
-```
-
-## Individual subject plots
-
-```{r, echo=FALSE, fig.dim = c(12,8)}
-sum_FDIdata %>%
-  filter(Intervention == c("negpos")) %>%
-  ggplot(aes(x = Time,  
-             y = SIHI_median,
-             group = Intensity,  
-             color = Intensity)) +    
-  geom_point(size = 3) + 
-  geom_line(size=1) +
-  geom_errorbar(aes(ymax=measure_iqr_high, ymin=measure_iqr_low), width=.1, size = 1) +
-  theme(legend.position="top") +
-  ggtitle("Intervention Negpos") +
-  facet_wrap(~ Subject)
-```
-
-## Individual subject plots
-
-```{r, echo=FALSE, fig.dim = c(12,8)}
-sum_FDIdata %>%
-  filter(Intervention == c("posneg")) %>%
-  ggplot(aes(x = Time,  
-             y = SIHI_median,
-             group = Intensity,  
-             color = Intensity)) +    
-  geom_point(size = 3) + 
-  geom_line(size=1) +
-  geom_errorbar(aes(ymax=measure_iqr_high, ymin=measure_iqr_low), width=.1, size = 1) +
-  theme(legend.position="top") +
-  ggtitle("Intervention Posneg") +
-  facet_wrap(~ Subject)
-```
-
-## Individual subject plots
-
-```{r, echo=FALSE, fig.dim = c(12,8)}
-sum_FDIdata %>%
-  filter(Intervention == c("random")) %>%
-  ggplot(aes(x = Time,  
-             y = SIHI_median,
-             group = Intensity,  
-             color = Intensity)) +    
-  geom_point(size = 3) + 
-  geom_line(size=1) +
-  geom_errorbar(aes(ymax=measure_iqr_high, ymin=measure_iqr_low), width=.1, size = 1) +
-  theme(legend.position="top") +
-  ggtitle("Intervention Random") +
-  facet_wrap(~ Subject)
-```
-
-## Individual subject plots
-
-```{r, echo=FALSE, fig.dim = c(12,8)}
-sum_FDIdata %>%
-  filter(Time == c("Pre")) %>%
-  ggplot(aes(x = Intervention,  
-             y = SIHI_median,
-             group = Intensity,  
-             color = Intensity)) +    
-  geom_point(size = 3) + 
-  geom_line(size=1) +
-  geom_errorbar(aes(ymax=measure_iqr_high, ymin=measure_iqr_low), width=.1, size = 1) +
-  theme(legend.position="top") +
-  ggtitle("Time Baseline") +
-  facet_wrap(~ Subject)
-```
-
-## Individual subject plots
-
-```{r, echo=FALSE, fig.dim = c(12,8)}
-sum_FDIdata %>%
-  filter(Time == c("0")) %>%
-  ggplot(aes(x = Intervention,  
-             y = SIHI_median,
-             group = Intensity,  
-             color = Intensity)) +    
-  geom_point(size = 3) + 
-  geom_line(size=1) +
-  geom_errorbar(aes(ymax=measure_iqr_high, ymin=measure_iqr_low), width=.1, size = 1) +
-  theme(legend.position="top") +
-  ggtitle("Time 0 min") +
-  facet_wrap(~ Subject)
-```
-
-## Individual subject plots
-
-```{r, echo=FALSE, fig.dim = c(12,8)}
-sum_FDIdata %>%
-  filter(Time == c("30")) %>%
-  ggplot(aes(x = Intervention,  
-             y = SIHI_median,
-             group = Intensity,  
-             color = Intensity)) +    
-  geom_point(size = 3) + 
-  geom_line(size=1) +
-  geom_errorbar(aes(ymax=measure_iqr_high, ymin=measure_iqr_low), width=.1, size = 1) +
-  theme(legend.position="top") +
-  ggtitle("Time 30 min") +
-  facet_wrap(~ Subject)
-```
-
-## Individual subject plots
-
-```{r, echo=FALSE, fig.dim = c(12,8)}
-sum_FDIdata %>%
-  filter(Time == c("60")) %>%
-  ggplot(aes(x = Intervention,  
-             y = SIHI_median,
-             group = Intensity,  
-             color = Intensity)) +    
-  geom_point(size = 3) + 
-  geom_line(size=1) +
-  geom_errorbar(aes(ymax=measure_iqr_high, ymin=measure_iqr_low), width=.1, size = 1) +
-  theme(legend.position="top") +
-  ggtitle("Time 60 min") +
-  facet_wrap(~ Subject)
-```
 
 ## LME. Model selection
 
-```{r}
+```{r, echo=FALSE}
 model1 <- lme4::lmer(ResponseNorm ~ Intervention*Time*Intensity + (1|Subject),
                      data = FDIdata, REML = F,
                      control = lmerControl(optCtrl = list(maxfun = 1e6)))
@@ -542,11 +134,11 @@ anova(model1,model2)
 
 ## LME. Model selection
 
-A model with a session as a random effect (1 | Subject/Intervention) has lower AIC and BIC values, so we will take it for further analysis.
+A model with a session as a random effect (1 \| Subject/Intervention) has lower AIC and BIC values, so we will take it for further analysis.
 
 ## LME. Significance test
 
-```{r}
+```{r, echo=FALSE}
 model <- lmerTest::lmer(ResponseNorm ~ Intervention*Time*Intensity + (1|Subject/Intervention),
                      data = FDIdata, REML = T,
                      control = lmerControl(optCtrl = list(maxfun = 1e6)))
@@ -555,7 +147,8 @@ car::Anova(model)
 
 ## LME. Significance test
 
-3-way interaction (our main hypothesis) is not significant. 2-way interactions of Intervention:Time and Intervention:Intensity are significant. We don't look at the main effects because we have significant interactions.
+3-way interaction (our main hypothesis) is not significant. 2-way interactions of Intervention:Time and Intervention:Intensity are significant. Main effects of Time and Intensity are significant. Due to significant interaction, interpretation of main effects may be misleading.
+
 
 ## LME. Model quality checks
 
@@ -588,32 +181,61 @@ If we fit a model without interactions, with just main effects, there is no coll
 
 ## Post-hoc plots of significant effects
 
-Unlike in the beginning, now we will plot not raw but normalized data (root to the 4th power of SIHI), the way it was used in the model. Since it's approximately normal, the y-axis is mean and sd of the data.
+We will plot not raw but normalized data, the way it was used in the model. Since it's approximately normal, the y-axis is mean and SE of the data.
 
 ```{r, echo=FALSE, warning = FALSE, message=FALSE, fig.dim = c(12,8)}
-sum_noIntens_FDIdata <- FDIdata %>%   
+sum_noInt_FDIdata <- FDIdata %>%   
   group_by(Intervention, Time, Subject) %>%  
   summarize(SIHI_normed_mean = mean(ResponseNorm)) %>%
   ungroup()
 
-sub_sum_noIntens_FDIdata <- sum_noIntens_FDIdata %>%   
+sub_sum_noInt_FDIdata <- sum_noInt_FDIdata %>%   
   group_by(Intervention, Time) %>%  
-  summarize(SIHI_normed_subject_mean = mean(SIHI_normed_mean),
-            SIHI_normed_subject_sd = sd(SIHI_normed_mean)) %>%
+  summarize(ResponseNorm_mean = mean(SIHI_normed_mean),
+            ResponseNorm_se = sd(SIHI_normed_mean)/sqrt(length(SIHI_normed_mean))) %>%
   ungroup()
 
-sub_sum_noIntens_FDIdata %>%
+sub_sum_noInt_FDIdata %>%
   ggplot(aes(x = Time,  
-             y = SIHI_normed_subject_mean,
+             y = ResponseNorm_mean,
              group = Intervention,  
              color = Intervention)) +    
   geom_point(size = 3) + 
   geom_line(size=1) +
-  geom_errorbar(aes(ymax=SIHI_normed_subject_mean+SIHI_normed_subject_sd, ymin=SIHI_normed_subject_mean-SIHI_normed_subject_sd), width=.1, size = 1) +
+  geom_errorbar(aes(ymax=ResponseNorm_mean+ResponseNorm_se,
+                    ymin=ResponseNorm_mean-ResponseNorm_se), width=.1, size = 1) +
   theme(legend.position="top")
 ```
-
 The interaction between Time and Intervention was significant.
+
+## Model prediction
+
+```{r, echo=FALSE}
+emm.model <- emmeans(model, ~ Intervention * Time,  data = FDIdata)
+
+emmip_output <- emmip(emm.model, ~ Intervention*Time ,type = "response", data = FDIdata, CIs = TRUE, plotit=FALSE)
+
+ggplot(data = emmip_output, aes(x=Time, y=yvar,group = Intervention,  
+             color = Intervention)) +
+  geom_point(size = 2) + 
+  geom_line(size = 1) +
+  geom_errorbar(aes(ymax=UCL, ymin=LCL), width=.06, size = 0.8) +
+  ylab("Predicted response")
+
+```
+## Post-hoc pairwise comparisons
+
+```{r, echo=FALSE}
+emm_options(lmer.df = 'asymptotic') # also possible: 'satterthwaite', 'kenward-roger', 'asymptotic'
+
+emm.model <- emmeans(model, ~ Intervention * Time, data = FDIdata)
+
+emm.model.contrast = contrast(emm.model, "pairwise", simple = "each",
+                                   combine = TRUE, adjust = "fdr")
+
+contrast.summary <- summary(emm.model.contrast,by = NULL)
+print(contrast.summary)
+```
 
 ## Post-hoc plots of significant effects
 
@@ -625,135 +247,95 @@ sum_noTime_FDIdata <- FDIdata %>%
 
 sub_sum_noTime_FDIdata <- sum_noTime_FDIdata %>%   
   group_by(Intervention, Intensity) %>%  
-  summarize(SIHI_normed_subject_mean = mean(SIHI_normed_mean),
-            SIHI_normed_subject_sd = sd(SIHI_normed_mean)) %>%
+  summarize(ResponseNorm_mean = mean(SIHI_normed_mean),
+            ResponseNorm_se = sd(SIHI_normed_mean)/sqrt(length(SIHI_normed_mean))) %>%
   ungroup()
 
 sub_sum_noTime_FDIdata %>%
   ggplot(aes(x = Intensity,  
-             y = SIHI_normed_subject_mean,
+             y = ResponseNorm_mean,
              group = Intervention,  
              color = Intervention)) +    
   geom_point(size = 3) + 
   geom_line(size=1) +
-  geom_errorbar(aes(ymax=SIHI_normed_subject_mean+SIHI_normed_subject_sd, ymin=SIHI_normed_subject_mean-SIHI_normed_subject_sd), width=.1, size = 1) +
+  geom_errorbar(aes(ymax=ResponseNorm_mean+ResponseNorm_se, ymin=ResponseNorm_mean-ResponseNorm_se), width=.1, size = 1) +
   theme(legend.position="top")
 ```
-
 The interaction between Time and Intensity was significant.
 
-## Post-hoc pairwise comparisons
 
-```{r, echo=FALSE}
-#emm_options(lmerTest.limit = 23040)
-#emm_options(pbkrtest.limit = 23040)
-emm_options(lmer.df = 'asymptotic') # also possible: 'satterthwaite', 'kenward-roger', 'asymptotic'
-
-emm.model <- emmeans(model, ~ Intervention * Time, data = FDIdata)
-
-emm.model.contrast = contrast(emm.model, "pairwise", simple = "each",
-                                   combine = TRUE, adjust = "fdr")
-
-summary(emm.model.contrast,by = NULL)
-```
-
-## Analysis with a subset of SI
-
-We repeat the analysis after subselecting data with SI 110% and 120% RMT.
+## Post-hoc plots of significant effects
 
 ```{r, echo=FALSE, warning = FALSE, message=FALSE, fig.dim = c(12,8)}
-lessIntense_FDIdata <- subset(FDIdata,is.element(Intensity,c(110,120)))
 
-lessIntense_FDIdata$Intensity <- as.factor(lessIntense_FDIdata$Intensity)
-
-```
-
-## Analysis with a subset of SI
-
-Model 2 was selected. 
-
-```{r, echo=FALSE, warning = FALSE, message=FALSE, fig.dim = c(12,8)}
-model1 <- lme4::lmer(ResponseNorm ~ Intervention*Time + (1|Subject/Intervention),
-                     data = lessIntense_FDIdata, REML = F,
-                     control = lmerControl(optCtrl = list(maxfun = 1e6)))
-
-model2 <- lme4::lmer(ResponseNorm ~ Intervention*Time + (1|Subject/Intervention) + (1|Intensity),
-                     data = lessIntense_FDIdata, REML = F,
-                     control = lmerControl(optCtrl = list(maxfun = 1e6)))
-
-model3 <- lme4::lmer(ResponseNorm ~ Intervention*Time + (1|Subject/Intervention) + (1|Subject:Intensity),
-                     data = lessIntense_FDIdata, REML = F,
-                     control = lmerControl(optCtrl = list(maxfun = 1e6)))
-
-anova(model1,model2,model3)
-```
-
-## Analysis with a subset of SI
-
-Random effects include subject, individual session, and intensity. In this analysis intensity is a categorical grouping factor, rather than a continuous measure, as it was in the main analysis.
-
-```{r}
-model <- lmerTest::lmer(ResponseNorm ~ Intervention*Time + (1|Subject/Intervention) + (1|Intensity),
-                     data = lessIntense_FDIdata, REML = T,
-                     control = lmerControl(optCtrl = list(maxfun = 1e6)))
-car::Anova(model)
-```
-
-## Analysis with a subset of SI. Model quality checks
-
-```{r, echo=FALSE, fig.dim = c(12,15)}
-check_model(model)
-```
-
-## Analysis with a subset of SI
-
-```{r}
-model_reduced <- lmerTest::lmer(ResponseNorm ~ Intervention + Time + (1|Subject/Intervention) + (1|Intensity),
-                     data = lessIntense_FDIdata, REML = T,
-                     control = lmerControl(optCtrl = list(maxfun = 1e6)))
-check_collinearity(model_reduced)
-```
-
-## Analysis with a subset of SI
-
-We will plot normalized data (root to the 4th power of SIHI), the way it was used in the model. Since it's approximately normal, the y-axis is mean and sd of the data. The two SI-s were averaged out.
-
-```{r, echo=FALSE, warning = FALSE, message=FALSE, fig.dim = c(12,8)}
-sum_noIntens_FDIdata <- lessIntense_FDIdata %>%   
-  group_by(Intervention, Time, Subject) %>%  
-  summarize(SIHI_normed_mean = mean(ResponseNorm)) %>%
+sub_sum_noInt_FDIdata <- FDIdata %>%   
+  group_by(Subject, Time) %>%  
+  summarize(ResponseNorm_subject_mean = mean(ResponseNorm)) %>%
   ungroup()
 
-sub_sum_noIntens_FDIdata <- sum_noIntens_FDIdata %>%   
-  group_by(Intervention, Time) %>%  
-  summarize(SIHI_normed_subject_mean = mean(SIHI_normed_mean),
-            SIHI_normed_subject_sd = sd(SIHI_normed_mean)) %>%
+sum_noInt_FDIdata <- sub_sum_noInt_FDIdata %>%   
+  group_by(Time) %>%  
+  summarize(ResponseNorm_mean = mean(ResponseNorm_subject_mean),
+            ResponseNorm_se = sd(ResponseNorm_subject_mean)/sqrt(length(ResponseNorm_subject_mean))) %>%
   ungroup()
 
-sub_sum_noIntens_FDIdata %>%
-  ggplot(aes(x = Time,  
-             y = SIHI_normed_subject_mean,
-             group = Intervention,  
-             color = Intervention)) +    
+sum_noInt_FDIdata %>%
+  ggplot(aes(x = as.numeric(Time),  
+             y = ResponseNorm_mean)) +    
   geom_point(size = 3) + 
-  geom_line(size=1) +
-  geom_errorbar(aes(ymax=SIHI_normed_subject_mean+SIHI_normed_subject_sd, ymin=SIHI_normed_subject_mean-SIHI_normed_subject_sd), width=.1, size = 1) +
-  theme(legend.position="top")
+  geom_line(size = 1) +
+  geom_errorbar(aes(ymax=ResponseNorm_mean+ResponseNorm_se, ymin=ResponseNorm_mean-ResponseNorm_se), width=.1, size = 1) 
 ```
+The Main effect of Time was significant.
 
-Looks the same.
+## Model prediction
+```{r, echo=FALSE}
+
+emmip_output <- emmip(emm.model, ~ Time ,type = "response", data = FDIdata, CIs = TRUE, plotit=FALSE)
+
+ggplot(data = emmip_output, aes(x=Time, y=yvar)) +
+  geom_point(size = 2) + 
+  geom_line(group = 1, size = 0.8) +
+  geom_errorbar(aes(ymax=UCL, ymin=LCL), width=.06, size = 0.8) +
+  ylab("Predicted response")
+
+```
 
 ## Post-hoc pairwise comparisons
 
 ```{r, echo=FALSE}
-emm_options(lmerTest.limit = 23040)
-#emm_options(pbkrtest.limit = 23040)
-emm_options(lmer.df = 'satterthwaite') # also possible: 'satterthwaite', 'kenward-roger', 'asymptotic'
 
-emm.model <- emmeans(model, ~ Intervention * Time, data = FDIdata)
+emm.model <- emmeans(model, ~ Time, data = FDIdata)
 
-emm.model.contrast = contrast(emm.model, "pairwise", simple = "each",
+emm.model.contrast = contrast(emm.model, "trt.vs.ctrl1", 
                                    combine = TRUE, adjust = "fdr")
 
-summary(emm.model.contrast,by = NULL)
+contrast.summary <- summary(emm.model.contrast,by = NULL)
+print(contrast.summary)
+
 ```
+
+## Post-hoc plots of significant effects
+
+```{r, echo=FALSE, warning = FALSE, message=FALSE, fig.dim = c(12,8)}
+sub_sum_noInt_noTime_FDIdata <- FDIdata %>%   
+  group_by(Subject, Intensity) %>%  
+  summarize(ResponseNorm_subject_mean = mean(ResponseNorm)) %>%
+  ungroup()
+
+sum_noInt_noTime_FDIdata <- sub_sum_noInt_noTime_FDIdata %>%   
+  group_by(Intensity) %>%  
+  summarize(ResponseNorm_mean = mean(ResponseNorm_subject_mean),
+            ResponseNorm_se = sd(ResponseNorm_subject_mean)/sqrt(length(ResponseNorm_subject_mean))) %>%
+  ungroup()
+
+sum_noInt_noTime_FDIdata %>%
+  ggplot(aes(x = Intensity,  
+             y = ResponseNorm_mean)) +    
+  geom_point(size = 3) + 
+  geom_line(size = 1) +
+  geom_errorbar(aes(ymax=ResponseNorm_mean+ResponseNorm_se, ymin=ResponseNorm_mean-ResponseNorm_se), width=.1, size = 1) 
+```
+The Main effect of Intensity was significant.
+
+
