@@ -10,10 +10,10 @@ pdf_document: default
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message=FALSE)
 ```
 
-```{r libraries, echo=FALSE, warning = FALSE, message=FALSE}
+```{r libraries}
 library(tidyverse)
 library(lattice)
 library(latticeExtra)
@@ -25,9 +25,11 @@ library(performance)
 library(emmeans) # post hoc multiple comparisons of linear mixed models
 library(see)
 library(patchwork)
+library(ggplot2)
 ```
 
-```{r, echo=FALSE}
+```{r}
+
 setwd("W:/Projects/2019-04 M1M1PAS Project/analysis/M1M1PASgit")
 
 MEPdata <- read.csv('MEPdata.csv', header=TRUE, sep=',', dec='.')
@@ -41,10 +43,11 @@ MEPdata$Response <- as.numeric(MEPdata$Response)
 FDIdata <- subset(MEPdata, Channel == "FDIl")
 ```
 
-
 ## Check distribution of the dependant variable
 
-```{r, echo=FALSE, fig.dim = c(12,8)}
+Single-trial SIHI is not normally distributed.
+
+```{r, fig.dim = c(15,10)}
 
 xy.time <- xyplot(Response ~ Time, data = FDIdata, type = c("a", "p"), pch = 20,
                   group = Subject, xlab = "Time", ylab = "SIHI", lwd = 2)
@@ -65,23 +68,22 @@ qq.data <- qqmath(~ Response, data = FDIdata,
                     panel.qqmath(x, ...)
                   })
 
-grid.arrange(grobs = list(xy.time,xy.interv,xy.intens,qq.data), ncol = 2, nrow = 2)
+hist.data <- ggplot(FDIdata, aes(x = Response)) +
+  geom_histogram(binwidth = 0.1) +
+  xlab("SIHI") +
+  theme_minimal()
+
+grid.arrange(grobs = list(xy.time,xy.interv,xy.intens,qq.data,hist.data), ncol = 3, nrow = 2)
 ```
-
-## Check distribution of the dependant variable
-
-```{r, echo=FALSE}
-hist(FDIdata$Response, xlab = "SIHI")
-```
-
-Single-trial SIHI is not normally distributed.
 
 ## Check distribution of the normalised variable
 
-We transform it by taking a root to the 4th power of the single-trial SIHI.
+We transform it by taking a root to the 4th power of the single-trial SIHI. Now it is approximately normal. For LME, we will use these transformed SIHI values. However, for plotting, we will use raw values with medians for expectation values and quartiles for error terms.
 
-```{r, echo=FALSE, fig.dim = c(12,8)}
+```{r, fig.dim = c(15,10)}
 FDIdata$ResponseNorm <- (FDIdata$Response)^0.25
+```
+```{r}
 
 xy.time <- xyplot(ResponseNorm ~ Time, data = FDIdata, type = c("a", "p"), pch = 20,
                   group = Subject, xlab = "Time", ylab = "Normalised SIHI", lwd = 2)
@@ -101,26 +103,20 @@ qq.data <- qqmath(~ ResponseNorm, data = FDIdata,
                     panel.qqmath(x, ...)
                   })
 
-grid.arrange(grobs = list(xy.time,xy.interv,xy.intens,qq.data), ncol = 2, nrow = 2)
+hist.data <- ggplot(FDIdata, aes(x = ResponseNorm)) +
+  geom_histogram(binwidth = 0.05) +
+  xlab("Normalised SIHI") +
+  theme_minimal()
+
+grid.arrange(grobs = list(xy.time,xy.interv,xy.intens,qq.data,hist.data), ncol = 3, nrow = 2)
 
 ```
-
-## Check distribution of the normalised variable
-
-```{r, echo=FALSE}
-
-hist(FDIdata$ResponseNorm, xlab = "SIHI^0.25")
-
-```
-
-## Check distribution of the normalised variable
-
-Now it is approximately normal. For LME, we will use these transformed SIHI values. However, for plotting, we will use raw values with medians for expectation values and quartiles for error terms.
-
 
 ## LME. Model selection
 
-```{r, echo=FALSE}
+A model with a session as a random effect (1 \| Subject/Intervention) has lower AIC and BIC values, so we will take it for further analysis.
+
+```{r}
 model1 <- lme4::lmer(ResponseNorm ~ Intervention*Time*Intensity + (1|Subject),
                      data = FDIdata, REML = F,
                      control = lmerControl(optCtrl = list(maxfun = 1e6)))
@@ -132,58 +128,43 @@ model2 <- lme4::lmer(ResponseNorm ~ Intervention*Time*Intensity + (1|Subject/Int
 anova(model1,model2)
 ```
 
-## LME. Model selection
-
-A model with a session as a random effect (1 \| Subject/Intervention) has lower AIC and BIC values, so we will take it for further analysis.
-
 ## LME. Significance test
 
-```{r, echo=FALSE}
+3-way interaction (our main hypothesis) is not significant. 2-way interactions of Intervention:Time and Intervention:Intensity are significant. Main effects of Time and Intensity are significant. Due to significant interaction, interpretation of main effects may be misleading.
+
+```{r}
 model <- lmerTest::lmer(ResponseNorm ~ Intervention*Time*Intensity + (1|Subject/Intervention),
                      data = FDIdata, REML = T,
                      control = lmerControl(optCtrl = list(maxfun = 1e6)))
 car::Anova(model)
 ```
 
-## LME. Significance test
-
-3-way interaction (our main hypothesis) is not significant. 2-way interactions of Intervention:Time and Intervention:Intensity are significant. Main effects of Time and Intensity are significant. Due to significant interaction, interpretation of main effects may be misleading.
-
-
-## LME. Model quality checks
-
-```{r, echo=FALSE, fig.dim = c(12,15)}
-check_model(model)
-```
-
 ## LME. Model quality checks
 
 Model residuals are approximately okay but collinearity is very high.
 
-## LME. Model quality checks
-
-```{r, echo=FALSE}
-check_collinearity(model)
+```{r, fig.dim = c(15,30)}
+#check_model(model)
 ```
 
-Indeed it is.
-
 ## LME. Model quality checks
-
-```{r}
-model_reduced <- lmerTest::lmer(ResponseNorm ~ Intervention + Time + Intensity + (1|Subject/Intervention),
-                     data = FDIdata, REML = T,
-                     control = lmerControl(optCtrl = list(maxfun = 1e6)))
-check_collinearity(model_reduced)
-```
 
 If we fit a model without interactions, with just main effects, there is no collinearity. So we will ignore this issue.
+
+```{r}
+# model_reduced <- lmerTest::lmer(ResponseNorm ~ Intervention + Time + Intensity + (1|Subject/Intervention),
+#                      data = FDIdata, REML = T,
+#                      control = lmerControl(optCtrl = list(maxfun = 1e6)))
+# check_collinearity(model_reduced)
+```
 
 ## Post-hoc plots of significant effects
 
 We will plot not raw but normalized data, the way it was used in the model. Since it's approximately normal, the y-axis is mean and SE of the data.
 
-```{r, echo=FALSE, warning = FALSE, message=FALSE, fig.dim = c(12,8)}
+The interaction between Time and Intervention was significant.
+
+```{r, fig.dim = c(10,8)}
 sum_noInt_FDIdata <- FDIdata %>%   
   group_by(Intervention, Time, Subject) %>%  
   summarize(SIHI_normed_mean = mean(ResponseNorm)) %>%
@@ -202,30 +183,34 @@ sub_sum_noInt_FDIdata %>%
              color = Intervention)) +    
   geom_point(size = 3) + 
   geom_line(size=1) +
+  ylab("Mean normalised SIHI") +
   geom_errorbar(aes(ymax=ResponseNorm_mean+ResponseNorm_se,
                     ymin=ResponseNorm_mean-ResponseNorm_se), width=.1, size = 1) +
   theme(legend.position="top")
 ```
-The interaction between Time and Intervention was significant.
 
 ## Model prediction
 
-```{r, echo=FALSE}
+Values predicted by the model and confidence limits.
+
+```{r, fig.dim = c(10,8)}
 emm.model <- emmeans(model, ~ Intervention * Time,  data = FDIdata)
 
 emmip_output <- emmip(emm.model, ~ Intervention*Time ,type = "response", data = FDIdata, CIs = TRUE, plotit=FALSE)
 
 ggplot(data = emmip_output, aes(x=Time, y=yvar,group = Intervention,  
              color = Intervention)) +
-  geom_point(size = 2) + 
+  geom_point(size = 3) + 
   geom_line(size = 1) +
-  geom_errorbar(aes(ymax=UCL, ymin=LCL), width=.06, size = 0.8) +
-  ylab("Predicted response")
+  geom_errorbar(aes(ymax=UCL, ymin=LCL), width=.1, size = 1) +
+  ylab("Predicted response")+
+  theme(legend.position="top")
 
 ```
+
 ## Post-hoc pairwise comparisons
 
-```{r, echo=FALSE}
+```{r}
 emm_options(lmer.df = 'asymptotic') # also possible: 'satterthwaite', 'kenward-roger', 'asymptotic'
 
 emm.model <- emmeans(model, ~ Intervention * Time, data = FDIdata)
@@ -239,7 +224,9 @@ print(contrast.summary)
 
 ## Post-hoc plots of significant effects
 
-```{r, echo=FALSE, warning = FALSE, message=FALSE, fig.dim = c(12,8)}
+The interaction between Time and Intensity was significant.
+
+```{r, fig.dim = c(10,8)}
 sum_noTime_FDIdata <- FDIdata %>%   
   group_by(Intervention, Intensity, Subject) %>%  
   summarize(SIHI_normed_mean = mean(ResponseNorm)) %>%
@@ -258,15 +245,16 @@ sub_sum_noTime_FDIdata %>%
              color = Intervention)) +    
   geom_point(size = 3) + 
   geom_line(size=1) +
+  ylab("Mean normalised SIHI") +
   geom_errorbar(aes(ymax=ResponseNorm_mean+ResponseNorm_se, ymin=ResponseNorm_mean-ResponseNorm_se), width=.1, size = 1) +
   theme(legend.position="top")
 ```
-The interaction between Time and Intensity was significant.
-
 
 ## Post-hoc plots of significant effects
 
-```{r, echo=FALSE, warning = FALSE, message=FALSE, fig.dim = c(12,8)}
+The Main effect of Time was significant.
+
+```{r, fig.dim = c(10,8)}
 
 sub_sum_noInt_FDIdata <- FDIdata %>%   
   group_by(Subject, Time) %>%  
@@ -280,30 +268,36 @@ sum_noInt_FDIdata <- sub_sum_noInt_FDIdata %>%
   ungroup()
 
 sum_noInt_FDIdata %>%
-  ggplot(aes(x = as.numeric(Time),  
+  ggplot(aes(x = Time,  
              y = ResponseNorm_mean)) +    
   geom_point(size = 3) + 
-  geom_line(size = 1) +
-  geom_errorbar(aes(ymax=ResponseNorm_mean+ResponseNorm_se, ymin=ResponseNorm_mean-ResponseNorm_se), width=.1, size = 1) 
+  geom_line(group = 1, size = 1) +
+  geom_errorbar(aes(ymax=ResponseNorm_mean+ResponseNorm_se, ymin=ResponseNorm_mean-ResponseNorm_se), width=.1, size = 1) +
+  labs(x = "Time", y = "Mean normalised SIHI") +
+  theme_minimal()
+  
 ```
-The Main effect of Time was significant.
 
 ## Model prediction
-```{r, echo=FALSE}
+
+Values predicted by the model and confidence limits.
+
+```{r, fig.dim = c(10,8)}
 
 emmip_output <- emmip(emm.model, ~ Time ,type = "response", data = FDIdata, CIs = TRUE, plotit=FALSE)
 
 ggplot(data = emmip_output, aes(x=Time, y=yvar)) +
-  geom_point(size = 2) + 
-  geom_line(group = 1, size = 0.8) +
-  geom_errorbar(aes(ymax=UCL, ymin=LCL), width=.06, size = 0.8) +
-  ylab("Predicted response")
+  geom_point(size = 3) + 
+  geom_line(group = 1, size = 1) +
+  geom_errorbar(aes(ymax=UCL, ymin=LCL), width=.1, size = 1) +
+  ylab("Predicted response")+
+  theme_minimal()
 
 ```
 
 ## Post-hoc pairwise comparisons
 
-```{r, echo=FALSE}
+```{r}
 
 emm.model <- emmeans(model, ~ Time, data = FDIdata)
 
@@ -317,7 +311,9 @@ print(contrast.summary)
 
 ## Post-hoc plots of significant effects
 
-```{r, echo=FALSE, warning = FALSE, message=FALSE, fig.dim = c(12,8)}
+The Main effect of Intensity was significant.
+
+```{r, fig.dim = c(10,8)}
 sub_sum_noInt_noTime_FDIdata <- FDIdata %>%   
   group_by(Subject, Intensity) %>%  
   summarize(ResponseNorm_subject_mean = mean(ResponseNorm)) %>%
@@ -334,8 +330,7 @@ sum_noInt_noTime_FDIdata %>%
              y = ResponseNorm_mean)) +    
   geom_point(size = 3) + 
   geom_line(size = 1) +
+  ylab("Mean normalised SIHI") +
   geom_errorbar(aes(ymax=ResponseNorm_mean+ResponseNorm_se, ymin=ResponseNorm_mean-ResponseNorm_se), width=.1, size = 1) 
 ```
-The Main effect of Intensity was significant.
-
 
