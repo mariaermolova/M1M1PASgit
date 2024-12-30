@@ -26,6 +26,8 @@ library(emmeans) # post hoc multiple comparisons of linear mixed models
 library(see)
 library(patchwork)
 library(ggplot2)
+library(kableExtra)
+library(rstatix)
 ```
 
 ```{r}
@@ -34,7 +36,7 @@ setwd("W:/Projects/2019-04 M1M1PAS Project/analysis/M1M1PASgit")
 
 MEPdata <- read.csv('MEPdata.csv', header=TRUE, sep=',', dec='.')
 MEPdata$Subject <- factor(MEPdata$Subject)
-MEPdata$Intervention <- factor(MEPdata$Intervention)
+MEPdata$Intervention <- factor(MEPdata$Intervention,levels=c("random","negneg","negpos","posneg"))
 MEPdata$Time <- factor(MEPdata$Time,levels=c("Pre","0","30","60"))
 MEPdata$Channel <- factor(MEPdata$Channel)
 MEPdata$Intensity <- as.numeric(MEPdata$Intensity)
@@ -181,12 +183,16 @@ sub_sum_noInt_FDIdata %>%
              y = ResponseNorm_mean,
              group = Intervention,  
              color = Intervention)) +    
-  geom_point(size = 3) + 
-  geom_line(size=1) +
+  geom_point(size = 3.5, position = position_dodge(width = 0.2)) + 
+  geom_line(size=1.5, position = position_dodge(width = 0.2)) +
   ylab("Mean normalised SIHI") +
   geom_errorbar(aes(ymax=ResponseNorm_mean+ResponseNorm_se,
-                    ymin=ResponseNorm_mean-ResponseNorm_se), width=.1, size = 1) +
-  theme(legend.position="top")
+                    ymin=ResponseNorm_mean-ResponseNorm_se), width=0, size = 1,
+                position = position_dodge(width = 0.2)) +
+  scale_colour_manual(values=c("#663333", "#004488", "#DDAA33","#999999")) +
+  theme_minimal() +
+  scale_x_discrete(labels=c("Baseline","0 min", "30 min", "60 min"))
+  
 ```
 
 ## Model prediction
@@ -215,11 +221,14 @@ emm_options(lmer.df = 'asymptotic') # also possible: 'satterthwaite', 'kenward-r
 
 emm.model <- emmeans(model, ~ Intervention * Time, data = FDIdata)
 
-emm.model.contrast = contrast(emm.model, "pairwise", simple = "each",
+emm.model.contrast = contrast(emm.model, "trt.vs.ctrl1", simple = "each",
                                    combine = TRUE, adjust = "fdr")
 
 contrast.summary <- summary(emm.model.contrast,by = NULL)
-print(contrast.summary)
+contrast_pretty <- kable(get_anova_table(contrast.summary), digits = 3)
+write.csv(contrast.summary, file = "contrasts_SIHI_interaction.csv")
+contrast_pretty
+save_kable(contrast_pretty,"contrasts_SIHI_interaction.txt")
 ```
 
 ## Post-hoc plots of significant effects
@@ -292,20 +301,6 @@ ggplot(data = emmip_output, aes(x=Time, y=yvar)) +
   geom_errorbar(aes(ymax=UCL, ymin=LCL), width=.1, size = 1) +
   ylab("Predicted response")+
   theme_minimal()
-
-```
-
-## Post-hoc pairwise comparisons
-
-```{r}
-
-emm.model <- emmeans(model, ~ Time, data = FDIdata)
-
-emm.model.contrast = contrast(emm.model, "trt.vs.ctrl1", 
-                                   combine = TRUE, adjust = "fdr")
-
-contrast.summary <- summary(emm.model.contrast,by = NULL)
-print(contrast.summary)
 
 ```
 

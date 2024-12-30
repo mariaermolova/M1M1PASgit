@@ -21,6 +21,8 @@ library(emmeans) # post hoc multiple comparisons of linear mixed models
 library(see)
 library(patchwork)
 library(ggplot2)
+library(kableExtra)
+library(rstatix)
 ```
 
 ```{r}
@@ -28,16 +30,16 @@ setwd("W:/Projects/2019-04 M1M1PAS Project/analysis/M1M1PASgit")
 
 FCdata <- read.csv('W:/Projects/2019-04 M1M1PAS Project/analysis/source_Paolo/fc_source/sourceConnectivityBeamformeroldLF.csv', header=TRUE, sep=',', dec='.')
 FCdata$Subject <- factor(FCdata$subject)
-FCdata$Intervention <- factor(FCdata$task)
-FCdata$Time <- factor(FCdata$run,levels=c("1","2","3","4","5"))
+FCdata$Intervention <- factor(FCdata$task,levels=c("random","negneg","negpos","posneg"))
+FCdata$Time <- factor(FCdata$run,levels=c("2","1","3","4","5"))
 FCdata$wPLI <- as.numeric(FCdata$wpli)
 FCdata$AEC <- as.numeric(FCdata$aec)
 ```
 
 ```{r}
 
-#FCdata$Response <- FCdata$wPLI
-FCdata$Response <- FCdata$AEC
+FCdata$Response <- FCdata$wPLI
+#FCdata$Response <- FCdata$AEC
 
 ```
 
@@ -76,8 +78,8 @@ grid.arrange(grobs = list(xy.time,xy.interv,qq.data,hist.data), ncol = 2, nrow =
 We transform it by taking an atanh and then taking it to the power of 0.24. If AEC, then just the power pf 0.30
 
 ```{r}
-#FCdata$ResponseNorm <- atanh(FCdata$Response)^0.24
-FCdata$ResponseNorm <- (FCdata$Response)^0.30
+FCdata$ResponseNorm <- atanh(FCdata$Response)^0.24
+#FCdata$ResponseNorm <- (FCdata$Response)^0.30
 ```
 
 ```{r, fig.dim = c(15,10)}
@@ -185,10 +187,15 @@ We will plot not raw but normalised data, the way it was used in the model. Sinc
 
 ```{r, fig.dim = c(10,8)}
 
-sum_FCdata <- FCdata %>%   
+sub_sum_FCdata <- FCdata %>%   
+  group_by(Intervention, Time, Subject) %>%  
+  summarize(FC_normed_mean = mean(ResponseNorm)) %>%
+  ungroup()
+
+sum_FCdata <- sub_sum_FCdata %>%   
   group_by(Intervention, Time) %>%  
-  summarize(ResponseNorm_mean = mean(ResponseNorm),
-            ResponseNorm_se = sd(ResponseNorm)/sqrt(length(ResponseNorm))) %>%
+  summarize(ResponseNorm_mean = mean(FC_normed_mean),
+            ResponseNorm_se = sd(FC_normed_mean)/sqrt(length(FC_normed_mean))) %>%
   ungroup()
 
 sum_FCdata %>%
@@ -231,10 +238,14 @@ emm_options(lmer.df = 'asymptotic') # also possible: 'satterthwaite', 'kenward-r
 
 emm.model <- emmeans(model, ~ Intervention * Time, data = FCdata)
 
-emm.model.contrast = contrast(emm.model, "pairwise", simple = "each",
+emm.model.contrast = contrast(emm.model, "trt.vs.ctrl1", simple = "each",
                                    combine = TRUE, adjust = "fdr")
 
-summary(emm.model.contrast,by = NULL)
+contrast.summary <- summary(emm.model.contrast,by = NULL)
+contrast_pretty <- kable(get_anova_table(contrast.summary), digits = 3)
+write.csv(contrast.summary, file = "contrasts_FC_interaction.csv")
+contrast_pretty
+save_kable(contrast_pretty,"contrasts_FC_interaction.txt")
 ```
 
 ## Post-hoc plots of significant effects
@@ -280,20 +291,3 @@ ggplot(data = emmip_output, aes(x=Time, y=yvar)) +
   theme(legend.position="top")
 
 ```
-
-## Post-hoc pairwise comparisons
-
-Results may be misleading due to involvement in interactions.
-
-```{r}
-
-emm.model <- emmeans(model, ~ Time, data = FCdata)
-
-emm.model.contrast = contrast(emm.model, "trt.vs.ctrl1", 
-                                   combine = TRUE, adjust = "fdr")
-
-contrast.summary <- summary(emm.model.contrast,by = NULL)
-contrast.summary
-
-```
-
