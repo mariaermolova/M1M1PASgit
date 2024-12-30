@@ -20,6 +20,7 @@ library(performance)
 library(emmeans) # post hoc multiple comparisons of linear mixed models
 library(see)
 library(patchwork)
+library(circular)
 ```
 
 ```{r, echo=FALSE}
@@ -33,52 +34,79 @@ FCdata$phase_lag <- as.numeric(FCdata$phase_lag)
 
 ```
 
-```{r, echo=FALSE}
-
-FCdata$ResponseSin <- sin(FCdata$phase_lag)
-FCdata$ResponseCos <- cos(FCdata$phase_lag)
-
-
-```
 ## Check distribution of the dependant variable
-
-```{r, echo=FALSE, fig.dim = c(12,8)}
-
-xy.time <- xyplot(Response ~ Time, data = FCdata, type = c("a", "p"), pch = 20,
-                  group = Subject, xlab = "Time", ylab = "FC", lwd = 2)
-
-xy.interv <- xyplot(Response ~ Intervention, data = FCdata, type = c("a", "p"), pch = 20,
-                 group = Subject, xlab = "Intervention", ylab = "FC", lwd = 2)
-                    
-qq.data <- qqmath(~ Response, data = FCdata,
-                  ylab = "FC",
-                  prepanel = prepanel.qqmathline,
-                  distribution = qnorm,
-                  panel = function(x, ...) {
-                    #panel.qqmathci(x, ...)
-                    panel.qqmathline(x, ...)
-                    panel.qqmath(x, ...)
-                  })
-
-grid.arrange(grobs = list(xy.time,xy.interv,qq.data), ncol = 2, nrow = 2)
-```
-## Check distribution of the dependant variable
-
-```{r, echo=FALSE}
-hist(FCdata$ResponseCos, xlab = "FC")
-```
-## LME. Model selection
 
 ```{r}
-install.packages("bpnreg")
-library(bpnreg)
+phase_lags <- FCdata$phase_lag
+circ_dat <- circular(phase_lags)
+circ_dat <- sample(circ_dat)
 
+aov.circular(circ_dat, FCdata$Subject, kappa = NULL,
+    method = c("LRT"), F.mod = TRUE, control.circular=list())
 ```
 
 ```{r}
-model <- bpnr(pred.I = phase_lag ~ 1 + Subject, its = 1000, burn = 500, data = FCdata)
+# Load required package
 
-# Summarize results
-summary(model)
+
+# Assuming `big_df` is a data frame with columns: subject, task, run, and phase_lag
+# Example: big_df <- data.frame(subject = ..., task = ..., run = ..., phase_lag = ...)
+
+# Get unique tasks and subjects
+Interventions <- unique(FCdata$Intervention)
+Subjects <- unique(FCdata$Subject)
+
+# Prepare data for Circular ANOVA
+anova_data <- data.frame(Intervention = character(), phase_diff = numeric())
+
+# Iterate through each task and subject
+for (thisIntervention in Interventions) {
+  for (thisSubject in Subjects) {
+    # Filter Pre runs (1, 2)
+    pre_df <- subset(FCdata, Subject == thisSubject & Intervention == thisIntervention & Time %in% c("1", "2"))
+    pre_phases <- pre_df$phase_lag %% (2 * pi)
+    
+    # Filter Post runs (3, 4, 5)
+    post_df <- subset(FCdata, Subject == thisSubject & Intervention == thisIntervention & Time %in% c("3", "4", "5"))
+    post_phases <- post_df$phase_lag %% (2 * pi)
+    
+    # Compute circular means
+    circular_mean_pre <- mean(circular(pre_phases))
+    circular_mean_post <- mean(circular(post_phases))
+    
+    # Compute difference (Post - Pre) and normalize
+    phase_diff <- (circular_mean_post - circular_mean_pre) %% (2 * pi)
+    
+    # Append to data frame
+    anova_data <- rbind(anova_data, data.frame(Intervention = thisIntervention, phase_diff = phase_diff))
+  }
+}
+
+# Convert phase_diff to circular object
+anova_data$phase_diff <- circular(anova_data$phase_diff)
+
+# Perform Circular ANOVA
+result <- aov.circular(anova_data$phase_diff, anova_data$Intervention, method = c("LRT"))
+
+# Display results
+print(result)
+
+```
+
+```{r}
+# Load required package
+
+# Get unique tasks and subjects
+subject <- FCdata$Subject
+
+# Convert phase_diff to circular object
+phlags_circ <- circular(FCdata$phase_lag %% (2 * pi))
+#phlags_circ <- sample(phlags_circ)
+
+# Perform Circular ANOVA
+result <- aov.circular(phlags_circ, subject, method = c("LRT"))
+
+# Display results
+print(result)
 
 ```
