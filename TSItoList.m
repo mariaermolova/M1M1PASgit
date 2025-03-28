@@ -1,21 +1,19 @@
-%% Reorder the SIHI or raw MEP data from a cell array into a list (i.e. table)
+%% Reorder the TS MEP data from a cell array into a list (i.e. table)
 % "MEP" cell array is (nSubjects, nConditions, nTimes, nChannels)
 % Transform it to a list to be used in R
 clear
 load(fullfile('W:\Projects\2019-04 M1M1PAS Project\analysis',...
-    'SIHI_data_conditioning_fixed_16subj_with_Rearranged.mat'),'MEP2','INT2')
-MEP = MEP2;
-INT = INT2;
+    'SIHI_data_conditioning_fixed_16subj_with_Rearranged.mat'),'TSI2')
+MEP = TSI2;
 
-%initiate variables
+%Initiate variables
 Subject = [];
 Intervention = [];
 Time = [];
 Channel = [];
-Intensity = [];
 Response = [];
 
-%set levels of variables
+%Set levels of variables
 Times = ["Pre","0","30","60"];
 Interventions = ["negneg","posneg","negpos","random"];
 Channels = ["APBr","FDIr","APBl","FDIl"]; %check it
@@ -32,8 +30,7 @@ for iSubject = 1:size(MEP, 1)
                 nSamples = length(MEP{iSubject, iIntervention, iTime, iChannel});
                 %SIHI values
                 Response = [Response; MEP{iSubject, iIntervention, iTime, iChannel}];
-                %stimulation intensity values
-                Intensity = [Intensity; INT{iSubject, iIntervention, iTime, iChannel}'];
+                
                 %repeat subject id
                 Subject = [Subject; repmat(sprintf("sub-%03.f", iSubject), nSamples, 1)];
                 %repeat run id
@@ -48,5 +45,5 @@ for iSubject = 1:size(MEP, 1)
 end
 
 %store everything in a table
-MEPdata = table(Subject, Intervention, Time, Channel, Intensity, Response);
-writetable(MEPdata,'MEPdata.csv');
+MEPdata = table(Subject, Intervention, Time, Channel, Response);
+writetable(MEPdata,'TSIdata.csv');
