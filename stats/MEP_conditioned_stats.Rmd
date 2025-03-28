@@ -1,0 +1,230 @@
+---
+title: "Conditioned MEP Analysis (FDIl)"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message=FALSE)
+```
+
+```{r libraries}
+library(tidyverse)
+library(lattice) #plotting
+library(gridExtra) #plotting
+library(lme4) #LME
+library(performance) # model evaluation
+library(emmeans) #pairwise comparisons
+library(kableExtra) #pretty tables
+library(rstatix) #pretty tables
+```
+
+```{r}
+setwd("W:/Projects/2019-04 M1M1PAS Project/analysis/M1M1PASgit")
+MEPdata <- read.csv('MEPrawdata.csv', header=TRUE, sep=',', dec='.')
+MEPdata$Subject <- factor(MEPdata$Subject)
+MEPdata$Intervention <- factor(MEPdata$Intervention,levels=c("random","negneg","negpos","posneg"))
+MEPdata$Time <- factor(MEPdata$Time,levels=c("Pre","0","30","60"))
+MEPdata$Channel <- factor(MEPdata$Channel)
+MEPdata$Intensity <- as.numeric(MEPdata$Intensity)
+MEPdata$Response <- as.numeric(MEPdata$Response)
+FDIdata <- subset(MEPdata, Channel == "FDIl")
+```
+
+## Check distribution of the dependant variable
+
+```{r, fig.dim = c(15,10)}
+xy.time <- xyplot(Response ~ Time, data = FDIdata, type = c("a", "p"), pch = 20,
+                  group = Subject, xlab = "Time", ylab = "MEP", lwd = 2)
+
+xy.interv <- xyplot(Response ~ Intervention, data = FDIdata, type = c("a", "p"), pch = 20,
+                 group = Subject, xlab = "Intervention", ylab = "MEP", lwd = 2)
+
+xy.intens <- xyplot(Response ~ Intensity, data = FDIdata, type = c("a", "p"), pch = 20,
+                    group = Subject, xlab = "Intensity", ylab = "MEP", lwd = 2)
+                    
+qq.data <- qqmath(~ Response, data = FDIdata,
+                  ylab = "MEP",
+                  prepanel = prepanel.qqmathline,
+                  distribution = qnorm,
+                  panel = function(x, ...) {
+                    #panel.qqmathci(x, ...)
+                    panel.qqmathline(x, ...)
+                    panel.qqmath(x, ...)
+                  })
+
+hist.data <- ggplot(FDIdata, aes(x = Response)) +
+  geom_histogram(binwidth = 1) +
+  xlab("MEP") +
+  theme_minimal()
+
+grid.arrange(grobs = list(xy.time,xy.interv,xy.intens,qq.data,hist.data), ncol = 3, nrow = 2)
+```
+
+## Check distribution of the normalised variable
+
+```{r, fig.dim = c(15,10)}
+FDIdata$ResponseNorm <- (FDIdata$Response)^0.25
+
+xy.time <- xyplot(ResponseNorm ~ Time, data = FDIdata, type = c("a", "p"), pch = 20,
+                  group = Subject, xlab = "Time", ylab = "Normalised MEP", lwd = 2)
+
+xy.interv <- xyplot(ResponseNorm ~ Intervention, data = FDIdata, type = c("a", "p"), pch = 20,
+                 group = Subject, xlab = "Intervention", ylab = "Normalised MEP", lwd = 2)
+
+xy.intens <- xyplot(ResponseNorm ~ Intensity, data = FDIdata, type = c("a", "p"), pch = 20,
+                    group = Subject, xlab = "Intensity", ylab = "Normalised MEP", lwd = 2)
+                    
+qq.data <- qqmath(~ ResponseNorm, data = FDIdata,
+                  ylab = "Normalised MEP",
+                  prepanel = prepanel.qqmathline,
+                  distribution = qnorm,
+                  panel = function(x, ...) {
+                    panel.qqmathline(x, ...)
+                    panel.qqmath(x, ...)
+                  })
+
+hist.data <- ggplot(FDIdata, aes(x = ResponseNorm)) +
+  geom_histogram(binwidth = 0.05) +
+  xlab("Normalised MEP") +
+  theme_minimal()
+
+grid.arrange(grobs = list(xy.time,xy.interv,xy.intens,qq.data,hist.data), ncol = 3, nrow = 2)
+
+```
+
+## LME. Model selection
+
+```{r}
+model1 <- lme4::lmer(ResponseNorm ~ Intervention*Time*Intensity + (1|Subject),
+                     data = FDIdata, REML = F,
+                     control = lmerControl(optCtrl = list(maxfun = 1e6)))
+
+model2 <- lme4::lmer(ResponseNorm ~ Intervention*Time*Intensity + (1|Subject/Intervention),
+                     data = FDIdata, REML = F,
+                     control = lmerControl(optCtrl = list(maxfun = 1e6)))
+
+anova(model1,model2)
+```
+
+## LME. Significance test
+
+```{r}
+model <- lmerTest::lmer(ResponseNorm ~ Intervention*Time*Intensity + (1|Subject/Intervention),
+                     data = FDIdata, REML = T,
+                     control = lmerControl(optCtrl = list(maxfun = 1e6)))
+car::Anova(model)
+```
+
+## LME. Model quality checks
+
+```{r, fig.dim = c(15,30)}
+check_model(model)
+```
+
+## LME. Model quality checks
+
+```{r}
+model_reduced <- lmerTest::lmer(ResponseNorm ~ Intervention + Time + Intensity + (1|Subject/Intervention),
+                     data = FDIdata, REML = T,
+                     control = lmerControl(optCtrl = list(maxfun = 1e6)))
+check_collinearity(model_reduced)
+```
+
+## Time*Intervention interaction plot: Data
+
+```{r, fig.dim = c(10,8)}
+sum_noInt_FDIdata <- FDIdata %>%   
+  group_by(Intervention, Time, Subject) %>%  
+  summarize(MEP_normed_mean = mean(ResponseNorm)) %>%
+  ungroup()
+
+sub_sum_noInt_FDIdata <- sum_noInt_FDIdata %>%   
+  group_by(Intervention, Time) %>%  
+  summarize(ResponseNorm_mean = mean(MEP_normed_mean),
+            ResponseNorm_se = sd(MEP_normed_mean)/sqrt(length(MEP_normed_mean))) %>%
+  ungroup()
+
+sub_sum_noInt_FDIdata %>%
+  ggplot(aes(x = Time,  
+             y = ResponseNorm_mean,
+             group = Intervention,  
+             color = Intervention)) +    
+  geom_point(size = 3.5, position = position_dodge(width = 0.2)) + 
+  geom_line(size=1.5, position = position_dodge(width = 0.2)) +
+  ylab("Mean normalised MEP") +
+  geom_errorbar(aes(ymax=ResponseNorm_mean+ResponseNorm_se,
+                    ymin=ResponseNorm_mean-ResponseNorm_se), width=0, size = 1,
+                position = position_dodge(width = 0.2)) +
+  scale_colour_manual(values=c("#999999", "#663333", "#004488", "#DDAA33")) +
+  scale_x_discrete(labels=c("Baseline","0 min", "30 min", "60 min"))
+  
+```
+
+## Time*Intervention interaction plot: Model prediction
+
+```{r, fig.dim = c(10,8)}
+emm.model <- emmeans(model, ~ Intervention * Time,  data = FDIdata)
+
+emmip_output <- emmip(emm.model, ~ Intervention*Time ,type = "response", data = FDIdata, CIs = TRUE, plotit=FALSE)
+
+emmip_output %>%
+  ggplot(aes(x=Time, 
+             y=yvar,
+             group = Intervention,  
+             color = Intervention)) +
+  geom_point(size = 3.5, position = position_dodge(width = 0.2)) + 
+  geom_line(size=1.5, position = position_dodge(width = 0.2)) +
+  ylab("Predicted response")+
+  geom_errorbar(aes(ymax=UCL, ymin=LCL), width=0, size = 1,
+                position = position_dodge(width = 0.2)) +
+  scale_colour_manual(values=c("#999999", "#663333", "#004488", "#DDAA33")) +
+  theme(legend.position="top") +
+  scale_x_discrete(labels=c("Baseline","0 min", "30 min", "60 min"))
+
+```
+
+## Pairwise comparisons: Time*Intervention interaction
+
+```{r}
+emm_options(lmer.df = 'asymptotic') 
+
+emm.model <- emmeans(model, ~ Intervention * Time, data = FDIdata)
+
+emm.model.contrast = contrast(emm.model, "trt.vs.ctrl1", simple = "each",
+                                   combine = TRUE, adjust = "fdr")
+
+contrast.summary <- summary(emm.model.contrast,by = NULL)
+contrast_pretty <- kable(get_anova_table(contrast.summary), digits = 3)
+print(contrast_pretty)
+
+write.csv(contrast.summary, file = "contrasts_conditioned_MEP.csv")
+save_kable(contrast_pretty,"contrasts_conditioned_MEP.txt")
+```
+
+## Intervention*Intensity interaction: Data
+
+
+```{r, fig.dim = c(10,8)}
+sum_noTime_FDIdata <- FDIdata %>%   
+  group_by(Intervention, Intensity, Subject) %>%  
+  summarize(MEP_normed_mean = mean(ResponseNorm)) %>%
+  ungroup()
+
+sub_sum_noTime_FDIdata <- sum_noTime_FDIdata %>%   
+  group_by(Intervention, Intensity) %>%  
+  summarize(ResponseNorm_mean = mean(MEP_normed_mean),
+            ResponseNorm_se = sd(MEP_normed_mean)/sqrt(length(MEP_normed_mean))) %>%
+  ungroup()
+
+sub_sum_noTime_FDIdata %>%
+  ggplot(aes(x = Intensity,  
+             y = ResponseNorm_mean,
+             group = Intervention,  
+             color = Intervention)) +    
+  geom_point(size = 3.5, position = position_dodge(width = 0.2)) + 
+  geom_line(size=1.5, position = position_dodge(width = 0.2)) +
+  ylab("Mean normalised MEP") +
+  scale_colour_manual(values=c("#999999", "#663333", "#004488", "#DDAA33")) +
+  geom_errorbar(aes(ymax=ResponseNorm_mean+ResponseNorm_se, ymin=ResponseNorm_mean-ResponseNorm_se), width=.1, size = 1, position = position_dodge(width = 0.2)) +
+  theme(legend.position="top")
+```

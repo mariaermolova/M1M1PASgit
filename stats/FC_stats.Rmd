@@ -1,7 +1,6 @@
 ---
-title: "FCAnalysisWPLI"
-output: powerpoint_presentation
-date: "2024-12-14"
+title: "FC analysis"
+output: html_document
 ---
 
 ```{r setup, include=FALSE}
@@ -10,42 +9,28 @@ knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message=FALSE)
 
 ```{r libraries}
 library(tidyverse)
-library(lattice)
-library(latticeExtra)
-library(gridExtra) # adjust plots in a grid
-library(lme4) # linear mixed models
-library(kableExtra)
-library(nlme)
-library(performance)
-library(emmeans) # post hoc multiple comparisons of linear mixed models
-library(see)
-library(patchwork)
-library(ggplot2)
-library(kableExtra)
-library(rstatix)
+library(lattice) #plotting
+library(gridExtra) #plotting
+library(lme4) #LME
+library(performance) # model evaluation
+library(emmeans) #pairwise comparisons
+library(kableExtra) #pretty tables
+library(rstatix) #pretty tables
 ```
 
 ```{r}
 setwd("W:/Projects/2019-04 M1M1PAS Project/analysis/M1M1PASgit")
 
-FCdata <- read.csv('W:/Projects/2019-04 M1M1PAS Project/analysis/source_Paolo/fc_source/sourceConnectivityBeamformeroldLF.csv', header=TRUE, sep=',', dec='.')
+FCdata <- read.csv('sourceFC.csv', header=TRUE, sep=',', dec='.')
 FCdata$Subject <- factor(FCdata$subject)
 FCdata$Intervention <- factor(FCdata$task,levels=c("random","negneg","negpos","posneg"))
-FCdata$Time <- factor(FCdata$run,levels=c("2","1","3","4","5"))
+FCdata$Time <- factor(FCdata$run,levels=c("2","1","3","4","5")) # !!!Baseline 2 is ref, it comes first in plots
 FCdata$wPLI <- as.numeric(FCdata$wpli)
 FCdata$AEC <- as.numeric(FCdata$aec)
-```
-
-```{r}
-
 FCdata$Response <- FCdata$wPLI
-#FCdata$Response <- FCdata$AEC
-
 ```
 
 ## Check distribution of the dependant variable
-
-The wPLI is not normally distributed.
 
 ```{r, fig.dim = c(15,10)}
 
@@ -75,14 +60,8 @@ grid.arrange(grobs = list(xy.time,xy.interv,qq.data,hist.data), ncol = 2, nrow =
 
 ## Check distribution of the normalised variable
 
-We transform it by taking an atanh and then taking it to the power of 0.24. If AEC, then just the power pf 0.30
-
 ```{r}
 FCdata$ResponseNorm <- atanh(FCdata$Response)^0.24
-#FCdata$ResponseNorm <- (FCdata$Response)^0.30
-```
-
-```{r, fig.dim = c(15,10)}
 
 xy.time <- xyplot(ResponseNorm ~ Time, data = FCdata, type = c("a", "p"), pch = 20,
                   group = Subject, xlab = "Time", ylab = "Normalised FC", lwd = 2)
@@ -112,8 +91,6 @@ grid.arrange(grobs = list(xy.time,xy.interv,qq.data,hist.data), ncol = 2, nrow =
 
 ## LME. Model selection
 
-A model with a session as a random effect (1 \| Subject/Intervention) has lower AIC and BIC values, so we will take it for further analysis.
-
 ```{r}
 model1 <- lme4::lmer(ResponseNorm ~ Intervention*Time + (1|Subject),
                      data = FCdata, REML = F,
@@ -128,8 +105,6 @@ anova(model1,model2)
 
 ## LME. Significance test
 
-2-way interaction of Intervention:Time is significant. The main effect of Time is also significant.
-
 ```{r}
 model <- lmerTest::lmer(ResponseNorm ~ Intervention*Time + (1|Subject/Intervention),
                      data = FCdata, REML = T,
@@ -139,13 +114,11 @@ car::Anova(model)
 
 ## LME. Model quality checks
 
-Model residuals are approximately okay but collinearity is very high.
-
 ```{r, fig.dim = c(15,30)}
 #check_model(model)
 ```
 
-## LME. Model quality checks
+## LME. Model quality checks (Linearity)
 
 ```{r, fig.dim = c(8,8)}
 
@@ -172,8 +145,6 @@ Model residuals are approximately okay but collinearity is very high.
 
 ## LME. Model quality checks
 
-If we fit a model without interactions, with just main effects, there is no collinearity. So we will ignore this issue.
-
 ```{r}
 # model_reduced <- lmerTest::lmer(ResponseNorm ~ Intervention + Time + (1|Subject/Intervention),
 #                      data = FCdata, REML = T,
@@ -181,9 +152,7 @@ If we fit a model without interactions, with just main effects, there is no coll
 # check_collinearity(model_reduced)
 ```
 
-## Post-hoc plots of significant effects
-
-We will plot not raw but normalised data, the way it was used in the model. Since it's approximately normal, the y-axis is mean and SE of the data.
+## Time*Intervention interaction plot: Data
 
 ```{r, fig.dim = c(10,8)}
 
@@ -203,38 +172,43 @@ sum_FCdata %>%
              y = ResponseNorm_mean,
              group = Intervention,  
              color = Intervention)) +    
-  geom_point(size = 3) + 
-  geom_line(size=1) +
+  geom_point(size = 3.5, position = position_dodge(width = 0.2)) + 
+  geom_line(size=1.5, position = position_dodge(width = 0.2)) +
   ylab("Mean normalised FC") +
-  geom_errorbar(aes(ymax=ResponseNorm_mean+ResponseNorm_se, ymin=ResponseNorm_mean-ResponseNorm_se), width=.1, size = 1) +
-  theme(legend.position="top")
+  geom_errorbar(aes(ymax=ResponseNorm_mean+ResponseNorm_se,
+                    ymin=ResponseNorm_mean-ResponseNorm_se), width=0, size = 1,
+                position = position_dodge(width = 0.2)) +
+  scale_colour_manual(values=c("#999999", "#663333", "#004488", "#DDAA33")) +
+  scale_x_discrete(labels=c("Base 2", "Base 1", "0 min", "30 min", "60 min"))
 ```
 
-## Model prediction
-
-Values predicted by the model and confidence limits.
+## Time*Intervention interaction plot: Model prediction
 
 ```{r, echo=FALSE}
 emm.model <- emmeans(model, ~ Intervention * Time,  data = FCdata)
 
 emmip_output <- emmip(emm.model, ~ Intervention*Time ,type = "response", data = FCdata, CIs = TRUE, plotit=FALSE)
 
-ggplot(data = emmip_output, aes(x=Time, y=yvar,group = Intervention,  
+emmip_output %>%
+  ggplot(aes(x=Time, 
+             y=yvar,
+             group = Intervention,  
              color = Intervention)) +
-  geom_point(size = 3) + 
-  geom_line(size = 1) +
-  geom_errorbar(aes(ymax=UCL, ymin=LCL), width=.1, size = 1) +
-  ylab("Predicted response") +
-  theme(legend.position="top")
+  geom_point(size = 3.5, position = position_dodge(width = 0.2)) + 
+  geom_line(size=1.5, position = position_dodge(width = 0.2)) +
+  ylab("Predicted response")+
+  geom_errorbar(aes(ymax=UCL, ymin=LCL), width=0, size = 1,
+                position = position_dodge(width = 0.2)) +
+  scale_colour_manual(values=c("#999999", "#663333", "#004488", "#DDAA33")) +
+  theme(legend.position="top") +
+  scale_x_discrete(labels=c("Base 2", "Base 1", "0 min", "30 min", "60 min"))
 
 ```
 
-## Post-hoc pairwise comparisons
-
-All 70 tests were performed with FDR correction. Here only the significant ones are shown.
+## Pairwise comparisons: Time*Intervention interaction
 
 ```{r}
-emm_options(lmer.df = 'asymptotic') # also possible: 'satterthwaite', 'kenward-roger', 'asymptotic'
+emm_options(lmer.df = 'asymptotic') 
 
 emm.model <- emmeans(model, ~ Intervention * Time, data = FCdata)
 
@@ -243,51 +217,8 @@ emm.model.contrast = contrast(emm.model, "trt.vs.ctrl1", simple = "each",
 
 contrast.summary <- summary(emm.model.contrast,by = NULL)
 contrast_pretty <- kable(get_anova_table(contrast.summary), digits = 3)
-write.csv(contrast.summary, file = "contrasts_FC_interaction.csv")
-contrast_pretty
-save_kable(contrast_pretty,"contrasts_FC_interaction.txt")
-```
+print(contrast_pretty)
 
-## Post-hoc plots of significant effects
-
-Results may be misleading due to involvement in interactions. Means and SE of normalised FC.
-
-```{r, fig.dim = c(10,8)}
-sub_sum_noInt_FCdata <- FCdata %>%   
-  group_by(Subject, Time) %>%  
-  summarize(ResponseNorm_subject_mean = mean(ResponseNorm)) %>%
-  ungroup()
-
-sum_noInt_FCdata <- sub_sum_noInt_FCdata %>%   
-  group_by(Time) %>%  
-  summarize(ResponseNorm_mean = mean(ResponseNorm_subject_mean),
-            ResponseNorm_se = sd(ResponseNorm_subject_mean)/sqrt(length(ResponseNorm_subject_mean))) %>%
-  ungroup()
-
-sum_noInt_FCdata %>%
-  ggplot(aes(x = Time,  
-             y = ResponseNorm_mean)) +    
-  geom_point(size = 3) + 
-  geom_line(group = 1, size = 1) +
-  ylab("Mean normalised FC") +
-  geom_errorbar(aes(ymax=ResponseNorm_mean+ResponseNorm_se, ymin=ResponseNorm_mean-ResponseNorm_se), width=.1, size = 1) +
-  theme(legend.position="top")
-  
-```
-
-## Model prediction
-
-Results may be misleading due to involvement in interactions. Values predicted by the model and confidence limits.
-
-```{r, fig.dim = c(10,8)}
-
-emmip_output <- emmip(emm.model, ~ Time ,type = "response", data = FCdata, CIs = TRUE, plotit=FALSE)
-
-ggplot(data = emmip_output, aes(x=Time, y=yvar)) +
-  geom_point(size = 3) + 
-  geom_line(group = 1, size = 1) +
-  geom_errorbar(aes(ymax=UCL, ymin=LCL), width=.1, size = 1) +
-  ylab("Predicted response") +
-  theme(legend.position="top")
-
+write.csv(contrast.summary, file = "contrasts_FC.csv")
+save_kable(contrast_pretty,"contrasts_FC.txt")
 ```
